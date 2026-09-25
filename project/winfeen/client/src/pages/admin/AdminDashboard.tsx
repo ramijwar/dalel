@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useStore } from '../../lib/store'
 import { api } from '../../lib/api'
-import type { AdminStats, ActivityItem, Category, CategoryField, Governorate, Region, Service, ServiceRequest, User, Zone } from '../../lib/types'
+import type { AdminStats, ActivityItem, Category, CategoryField, Filter, FilterSourceOption, Governorate, Region, Service, ServiceRequest, User, Zone } from '../../lib/types'
 import { useToast } from '../../lib/useToast'
 import { num, fmtDateTime, fmtDate } from '../../lib/utils'
 import Icon from '../../components/Icon'
@@ -14,7 +14,7 @@ import DangerZone from '../../components/DangerZone'
 import ScheduleEditor from '../../components/ScheduleEditor'
 import { FieldsBuilder, DynamicFields, toDraft, type DraftField, type FieldValues } from '../../components/CategoryFields'
 
-type Tab = 'overview' | 'services' | 'categories' | 'governorates' | 'regions' | 'requests' | 'users' | 'settings' | 'activity'
+type Tab = 'overview' | 'services' | 'categories' | 'filters' | 'governorates' | 'regions' | 'requests' | 'users' | 'settings' | 'activity'
 
 export default function AdminDashboard() {
   const { user } = useStore()
@@ -27,6 +27,7 @@ export default function AdminDashboard() {
     { id: 'overview',   icon: 'bar-chart-3',   label: 'نظرة عامة' },
     { id: 'services',   icon: 'boxes',         label: 'الخدمات' },
     { id: 'categories', icon: 'layout-grid',   label: 'الأقسام' },
+    { id: 'filters',    icon: 'list-filter',   label: 'الفلاتر' },
     { id: 'governorates', icon: 'map',         label: 'المحافظات' },
     { id: 'regions',    icon: 'map-pin',       label: 'المناطق' },
     { id: 'requests',   icon: 'inbox',         label: 'الطلبات' },
@@ -54,6 +55,7 @@ export default function AdminDashboard() {
         {tab === 'overview' && <OverviewTab />}
         {tab === 'services' && <ServicesTab />}
         {tab === 'categories' && <CategoriesTab />}
+        {tab === 'filters' && <FiltersTab />}
         {tab === 'governorates' && <GovernoratesTab />}
         {tab === 'regions' && <RegionsTab />}
         {tab === 'requests' && <RequestsTab />}
@@ -530,6 +532,328 @@ function CategoryForm({ cat, onSaved }: { cat: Category | null; onSaved: () => v
   )
 }
 
+
+/* ══════════════════════════════════════════════════════════════
+ *  تبويب الفلاتر
+ *  ─────────────────────────────────────────────────────────────
+ *  الفلاتر كانت مكتوبة في كود الواجهة (CAT_INFO): الصيدليات بالمناطق
+ *  والأطباء بالاختصاص والسرفيس بنوع المركبة — بلا قدرة للمدير على
+ *  التغيير. صارت الآن بيانات:
+ *    • «مكتبة الفلاتر»: يُنشئ المدير فلتراً ويحدّد مصدر بياناته
+ *    • «فلاتر الأقسام»: يُسنِد لكل قسم فلتراً **أساسياً** يقود بطاقات
+ *      المستوى الأول في صفحته، ويمكنه إسناد فلاتر إضافية للتصفية.
+ * ══════════════════════════════════════════════════════════════ */
+function FiltersTab() {
+  const { categories, refreshMeta } = useStore()
+  const [items, setItems] = useState<Filter[]>([])
+  const [sources, setSources] = useState<FilterSourceOption[]>([])
+  const [showForm, setShowForm] = useState(false)
+  const [editFilter, setEditFilter] = useState<Filter | null>(null)
+  const [formNonce, setFormNonce] = useState(0)
+  const [assignCat, setAssignCat] = useState<Category | null>(null)
+  const toast = useToast()
+
+  const load = () => {
+    api.admin.filters()
+      .then((r) => { setItems(r.items); setSources(r.sources ?? []) })
+      .catch(() => {})
+  }
+  useEffect(() => { load() }, [])
+
+  const doDelete = async (f: Filter) => {
+    const used = f.used_by ?? 0
+    const msg = used > 0
+      ? `حذف الفلتر «${f.label}»؟\n\nمُسنَد إلى ${used} قسماً وسيُزال منها،\nوستُعرض خدماتها بلا تجميع حتى تُسنِد لها فلتراً آخر.`
+      : `حذف الفلتر «${f.label}»؟`
+    if (!confirm(msg)) return
+    try {
+      const r = await api.admin.deleteFilter(f.id)
+      toast(r.message)
+      load()
+      refreshMeta()
+    } catch (e) {
+      toast(e instanceof Error ? e.message : 'تعذّر الحذف', 'error')
+    }
+  }
+
+  /** وصف مصدر الفلتر — يُبنى من قائمة المصادر التي أرسلها الخادم */
+  const sourceLabel = (f: Filter) => {
+    const s = sources.find((x) => x.source_type === f.source_type && (f.source_type !== 'field' || x.source_key === f.source_key))
+    return s ? s.hint : f.source_type
+  }
+
+  return (
+    <>
+      <div className="admin-toolbar">
+        <button className="btn btn--primary btn--sm" onClick={() => { setEditFilter(null); setFormNonce((n) => n + 1); setShowForm(true) }}>
+          <Icon name="plus" size={14} /> إضافة فلتر
+        </button>
+      </div>
+
+      {/* ─── مكتبة الفلاتر ─── */}
+      <h2 className="admin-sec-title"><Icon name="list-filter" size={16} /> مكتبة الفلاتر</h2>
+      <div className="admin-table-wrap">
+        <table className="admin-table">
+          <thead>
+            <tr><th>#</th><th>الاسم</th><th>المصدر</th><th>الأيقونة</th><th>مُسنَد إلى</th><th>إجراءات</th></tr>
+          </thead>
+          <tbody>
+            {items.length === 0 && (
+              <tr><td colSpan={6} className="admin-empty">لا فلاتر بعد — أضف أول فلتر</td></tr>
+            )}
+            {items.map((f) => (
+              <tr key={f.id} className={f.is_active ? '' : 'is-muted'}>
+                <td>{f.id}</td>
+                <td>
+                  <strong>{f.label}</strong>
+                  {!f.is_active && <span className="badge badge--off">معطّل</span>}
+                  <div className="admin-sub">المفتاح: <code>{f.key}</code></div>
+                </td>
+                <td>{sourceLabel(f)}</td>
+                <td><CatIcon icon={f.icon || 'filter'} size={18} /></td>
+                <td>{(f.used_by ?? 0) > 0 ? `${f.used_by} قسماً` : <span className="admin-warn">غير مُسنَد</span>}</td>
+                <td className="table-actions">
+                  <button className="iconbtn" onClick={() => { setEditFilter(f); setShowForm(true) }} title="تعديل"><Icon name="pencil" size={15} /></button>
+                  <button className="iconbtn iconbtn--danger" onClick={() => doDelete(f)} title="حذف"><Icon name="trash-2" size={15} /></button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* ─── الإسناد للأقسام ─── */}
+      <h2 className="admin-sec-title"><Icon name="layout-grid" size={16} /> فلاتر الأقسام</h2>
+      <p className="admin-note">
+        <strong>الفلتر الأساسي (⭐)</strong> هو الذي يبني بطاقات العرض في المستوى الأول
+        لصفحة القسم — مثال: الصيدليات ← المناطق · الأطباء ← الاختصاص · السرفيس ← نوع المركبة.
+        الفلاتر الإضافية تظهر قائمة اختيار داخل شريط الصفحة.
+      </p>
+      <div className="admin-table-wrap">
+        <table className="admin-table">
+          <thead>
+            <tr><th>القسم</th><th>الفلاتر المُسنَدة</th><th>البطاقات تعتمد على</th><th>إجراءات</th></tr>
+          </thead>
+          <tbody>
+            {categories.map((c) => {
+              const fl = c.filters ?? []
+              const primary = fl.find((f) => f.is_primary)
+              return (
+                <tr key={c.id}>
+                  <td>
+                    <span className="cat-cell"><CatIcon icon={c.icon} size={17} /> <strong>{c.name}</strong></span>
+                  </td>
+                  <td>
+                    {fl.length === 0
+                      ? <span className="admin-warn">لا فلاتر — تُعرض الخدمات بلا تجميع</span>
+                      : fl.map((f) => (
+                        <span key={f.id} className={`fchip ${f.is_primary ? 'is-primary' : ''}`}>
+                          {f.is_primary && '⭐'} {f.label}
+                        </span>
+                      ))}
+                  </td>
+                  <td>{primary ? primary.label : '—'}</td>
+                  <td className="table-actions">
+                    <button className="btn btn--sm btn--ghost" onClick={() => setAssignCat(c)}>
+                      <Icon name="filter" size={14} /> تعديل الفلاتر
+                    </button>
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      <Modal open={showForm} onClose={() => { setShowForm(false); setEditFilter(null) }} title={editFilter ? `تعديل فلتر: ${editFilter.label}` : 'إضافة فلتر'}>
+        <FilterForm
+          key={editFilter ? `flt-${editFilter.id}` : `flt-new-${formNonce}`}
+          filter={editFilter}
+          sources={sources}
+          onSaved={() => { setShowForm(false); setEditFilter(null); load(); toast('تم الحفظ') }}
+        />
+      </Modal>
+
+      <Modal open={!!assignCat} onClose={() => setAssignCat(null)} title={assignCat ? `فلاتر قسم: ${assignCat.name}` : ''}>
+        {assignCat && (
+          <CategoryFiltersForm
+            key={`assign-${assignCat.id}`}
+            cat={assignCat}
+            filters={items}
+            onSaved={(msg) => { setAssignCat(null); toast(msg); refreshMeta() }}
+          />
+        )}
+      </Modal>
+    </>
+  )
+}
+
+/** إنشاء/تعديل فلتر — الاسم + مصدر البيانات + الأيقونة */
+function FilterForm({ filter, sources, onSaved }: { filter: Filter | null; sources: FilterSourceOption[]; onSaved: () => void }) {
+  const [label, setLabel] = useState(filter?.label ?? '')
+  const [sourceType, setSourceType] = useState<Filter['source_type']>(filter?.source_type ?? 'region')
+  const [sourceKey, setSourceKey] = useState(filter?.source_key ?? '')
+  const [icon, setIcon] = useState(filter?.icon ?? '')
+  const [active, setActive] = useState(filter?.is_active ?? true)
+  const [busy, setBusy] = useState(false)
+  const toast = useToast()
+
+  const fieldSources = sources.filter((s) => s.source_type === 'field')
+  const needsField = sourceType === 'field'
+
+  const save = async () => {
+    if (!label.trim()) { toast('اسم الفلتر مطلوب', 'error'); return }
+    if (needsField && !sourceKey) { toast('اختر الحقل الذي يبني عليه الفلتر', 'error'); return }
+    setBusy(true)
+    try {
+      const payload = { label: label.trim(), source_type: sourceType, source_key: needsField ? sourceKey : '', icon, is_active: active }
+      const r = filter ? await api.admin.updateFilter(filter.id, payload) : await api.admin.createFilter(payload)
+      toast(r.message)
+      onSaved()
+    } catch (e) {
+      toast(e instanceof Error ? e.message : 'تعذّر الحفظ', 'error')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="form">
+      <label className="field">
+        <span className="field__label">اسم الفلتر (يظهر للزائر)</span>
+        <input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="مثال: المناطق · الاختصاص · نوع المركبة" />
+      </label>
+
+      <label className="field">
+        <span className="field__label">مصدر البيانات</span>
+        <select value={sourceType} onChange={(e) => { const v = e.target.value as Filter['source_type']; setSourceType(v); if (v !== 'field') setSourceKey('') }}>
+          <option value="region">المناطق — من جدول المناطق</option>
+          <option value="specialty">الاختصاص — من جدول الاختصاصات</option>
+          <option value="field">حقل قائمة في الأقسام</option>
+        </select>
+        <span className="field__help">المصدر يحدّد قيم الفلتر التي تُجمَّع عليها الخدمات.</span>
+      </label>
+
+      {needsField && (
+        <label className="field">
+          <span className="field__label">الحقل</span>
+          <select value={sourceKey} onChange={(e) => setSourceKey(e.target.value)}>
+            <option value="">— اختر حقلاً —</option>
+            {fieldSources.map((s) => (
+              <option key={s.source_key} value={s.source_key}>{s.label} — {s.hint}</option>
+            ))}
+          </select>
+          {fieldSources.length === 0 && (
+            <span className="field__help admin-warn">
+              لا حقول قائمة في أي قسم. أنشئ حقلاً من نوع «قائمة» في تبويب الأقسام أولاً.
+            </span>
+          )}
+        </label>
+      )}
+
+      <div className="field">
+        <span className="field__label">الأيقونة</span>
+        <IconPicker value={icon} onChange={setIcon} columns={6} />
+      </div>
+
+      <label className="chk">
+        <input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} />
+        <span>مُفعَّل</span>
+      </label>
+
+      <div className="form-actions">
+        <button className="btn btn--primary" onClick={save} disabled={busy}>
+          {busy ? 'يحفظ…' : 'حفظ'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
+/**
+ * إسناد فلاتر قسم.
+ * كل فلاتر المكتبة تظهر بصفوف: ☑ مُسنَد · ◉ أساسي.
+ * الأساسي واحد فقط — والخادم يضمن ذلك حتى لو أُرسل أكثر من واحد.
+ */
+function CategoryFiltersForm({ cat, filters, onSaved }: { cat: Category; filters: Filter[]; onSaved: (msg: string) => void }) {
+  const assigned = new Map((cat.filters ?? []).map((f) => [f.filter_id, f.is_primary]))
+  const [chosen, setChosen] = useState<Record<number, boolean>>(() => {
+    const o: Record<number, boolean> = {}
+    for (const f of filters) o[f.id] = assigned.has(f.id)
+    return o
+  })
+  const [primaryId, setPrimaryId] = useState<number | null>(() => {
+    const p = (cat.filters ?? []).find((f) => f.is_primary)
+    return p ? p.filter_id : null
+  })
+  const [busy, setBusy] = useState(false)
+  const toast = useToast()
+
+  const toggle = (id: number, on: boolean) => {
+    setChosen((c) => ({ ...c, [id]: on }))
+    if (on) {
+      // أول فلتر يُختار يصبح أساسياً تلقائياً — والقسم بلا أساسي يفقد بطاقاته
+      setPrimaryId((p) => p ?? id)
+    } else {
+      setPrimaryId((p) => (p === id ? null : p))
+    }
+  }
+
+  const save = async () => {
+    const rows = filters
+      .filter((f) => chosen[f.id])
+      .map((f, i) => ({ filter_id: f.id, is_primary: f.id === primaryId, sort_order: i }))
+    if (rows.length && !rows.some((r) => r.is_primary)) {
+      rows[0].is_primary = true
+    }
+    setBusy(true)
+    try {
+      const r = await api.admin.setCategoryFilters(cat.id, rows)
+      onSaved(r.message)
+    } catch (e) {
+      toast(e instanceof Error ? e.message : 'تعذّر الحفظ', 'error')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="form">
+      <p className="admin-note">
+        الفلتر الأساسي (⭐) يبني بطاقات المستوى الأول في صفحة «{cat.name}».
+        {chosen && Object.values(chosen).filter(Boolean).length > 1 && ' إسناد أكثر من فلتر يُضيف قائمة تصفية داخل شريط الصفحة.'}
+      </p>
+
+      <table className="admin-table admin-table--pick">
+        <thead><tr><th>إسناد</th><th>أساسي</th><th>الفلتر</th><th>المصدر</th></tr></thead>
+        <tbody>
+          {filters.map((f) => (
+            <tr key={f.id} className={chosen[f.id] ? 'is-picked' : ''}>
+              <td>
+                <input type="checkbox" checked={!!chosen[f.id]} onChange={(e) => toggle(f.id, e.target.checked)} aria-label={`إسناد ${f.label}`} />
+              </td>
+              <td>
+                <input
+                  type="radio" name={`primary-${cat.id}`}
+                  checked={primaryId === f.id}
+                  disabled={!chosen[f.id]}
+                  onChange={() => setPrimaryId(f.id)}
+                  aria-label={`${f.label} أساسي`}
+                />
+              </td>
+              <td><CatIcon icon={f.icon || 'filter'} size={16} /> <strong>{f.label}</strong></td>
+              <td className="admin-sub">{f.source_type === 'field' ? `حقل: ${f.source_key}` : f.source_type}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+
+      <div className="form-actions">
+        <button className="btn btn--primary" onClick={save} disabled={busy}>{busy ? 'يحفظ…' : 'حفظ الفلاتر'}</button>
+      </div>
+    </div>
+  )
+}
 
 function GovernoratesTab() {
   const { refreshMeta } = useStore()

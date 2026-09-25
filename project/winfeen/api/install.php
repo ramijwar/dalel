@@ -290,6 +290,32 @@ try {
         created_at TEXT
     )";
 
+    // ═══ الفلاتر ═══
+    // مكتبة فلاتر (مصدرها: مناطق · اختصاص · حقل قائمة) + إسنادها للأقسام.
+    // البذرة تُنفَّذ عند أول تشغيل من migrate() في includes/db.php.
+    $tables['filters'] = "CREATE TABLE filters (
+        id         INTEGER PRIMARY KEY AUTOINCREMENT,
+        filter_key TEXT NOT NULL UNIQUE,
+        label      TEXT NOT NULL,
+        source_type TEXT NOT NULL DEFAULT 'region',
+        source_key TEXT NOT NULL DEFAULT '',
+        icon       TEXT NOT NULL DEFAULT '',
+        sort_order INTEGER NOT NULL DEFAULT 0,
+        is_active  INTEGER NOT NULL DEFAULT 1,
+        created_at TEXT
+    )";
+
+    $tables['category_filters'] = "CREATE TABLE category_filters (
+        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+        category_id INTEGER NOT NULL REFERENCES categories(id) ON DELETE CASCADE,
+        filter_id   INTEGER NOT NULL REFERENCES filters(id) ON DELETE CASCADE,
+        is_primary  INTEGER NOT NULL DEFAULT 0,
+        sort_order  INTEGER NOT NULL DEFAULT 0,
+        is_active   INTEGER NOT NULL DEFAULT 1,
+        created_at  TEXT,
+        UNIQUE(category_id, filter_id)
+    )";
+
     // ═══ الخدمات ═══
     $tables['services'] = "CREATE TABLE services (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -401,6 +427,8 @@ try {
         'idx_regions_parent'     => 'CREATE INDEX idx_regions_parent ON regions(parent_id)',
         'idx_cf_category'        => 'CREATE INDEX idx_cf_category ON category_fields(category_id)',
         'idx_cfo_field'          => 'CREATE INDEX idx_cfo_field ON category_field_options(field_id)',
+        'idx_catfilter_cat'      => 'CREATE INDEX idx_catfilter_cat ON category_filters(category_id)',
+        'idx_catfilter_flt'      => 'CREATE INDEX idx_catfilter_flt ON category_filters(filter_id)',
     ];
     foreach ($indexes as $name => $sql) {
         $pdo->exec($sql);

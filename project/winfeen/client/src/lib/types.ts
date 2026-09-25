@@ -70,6 +70,8 @@ export interface Category {
   features: Record<string, boolean>
   /** الحقول الخاصة بهذا القسم — تُبنى ديناميكياً في نماذج الخدمات */
   fields?: CategoryField[]
+  /** الفلاتر المُسنَدة لهذا القسم — الأساسي أولاً، وهو الذي يقود العرض */
+  filters?: CategoryFilterLink[]
   is_active?: boolean
 }
 
@@ -136,6 +138,8 @@ export interface Service {
   region_name: string | null
   region_zone: Zone | null
   region_level?: 'city' | 'village' | null
+  /** يُرسله الخادم في shape_service — أساس فلتر «الاختصاص» */
+  specialty_id?: number | null
   city_name?: string | null
   governorate_id?: number | null
   governorate_name?: string | null
@@ -193,6 +197,65 @@ export interface Specialty {
   services_count?: number
 }
 
+/**
+ * الفلاتر — مكتبة في قاعدة البيانات، لم تكن موجودة سابقاً.
+ *
+ * كان «أي فلتر يقود أي قسم» مكتوباً في كود الواجهة (CAT_INFO)، فيقود
+ * الصيدليات بالمناطق والأطباء بالاختصاص والسرفيس بنوع المركبة بلا قدرة
+ * للمدير على التغيير. الآن:
+ *   • filters          = مكتبة الفلاتر (اسم + مصدر بيانات)
+ *   • category.filters = الفلاتر المُسنَدة للقسم، الأساسي أولاً
+ */
+export type FilterSource = 'region' | 'specialty' | 'field'
+
+export interface Filter {
+  id: number
+  key: string
+  label: string
+  /** region = المناطق · specialty = الاختصاص · field = حقل قائمة في قسم */
+  source_type: FilterSource
+  /** مفتاح الحقل عند source_type = 'field' (مثال: vehicle · direction) */
+  source_key: string
+  icon: string
+  sort_order: number
+  is_active: boolean
+  /** كم قسماً يستخدم هذا الفلتر — يمنع حذفاً مفاجئاً */
+  used_by?: number
+}
+
+/** فلتر مُسنَد لقسم — is_primary يقود بطاقات المستوى الأول */
+export interface CategoryFilterLink {
+  /** معرّف سطر الإسناد */
+  id: number
+  /** معرّف الفلتر في المكتبة — يُستخدم عند الحفظ في اللوحة */
+  filter_id: number
+  key: string
+  label: string
+  source_type: FilterSource
+  source_key: string
+  icon: string
+  is_primary: boolean
+  sort_order: number
+}
+
+/** بطاقة تجميع واحدة — تُحسب في الخادم من كل الخدمات قبل ترقيم الصفحات */
+export interface GroupCard {
+  key: string
+  label: string
+  icon: string
+  total: number
+  open: number
+  on_duty: number
+}
+
+/** مصدر متاح لبناء فلتر عليه (يُعرض في لوحة التحكم) */
+export interface FilterSourceOption {
+  source_type: FilterSource
+  source_key: string
+  label: string
+  hint: string
+}
+
 export interface ServiceListResponse {
   items: Service[]
   total: number
@@ -201,6 +264,8 @@ export interface ServiceListResponse {
   open_now: number
   on_duty: number
   regions: RegionGroup[]
+  /** مجمّعة بمفتاح الفلتر: { region: [...], 'flt-vehicle': [...] } */
+  groups?: Record<string, GroupCard[]>
   time: string
 }
 

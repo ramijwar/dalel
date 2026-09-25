@@ -149,6 +149,22 @@ function route(): void
             if ($m === 'PUT' || $m === 'PATCH') { admin_service_update($id); return; }
             if ($m === 'DELETE')              { admin_service_delete($id); return; }
         }
+        // ─── الفلاتر ───
+        // مكتبة الفلاتر:      /admin/filters[/{id}]
+        // إسناد فلاتر قسم:     /admin/categories/{id}/filters
+        //
+        // ملاحظة: مسار الإسناد يُفحص **قبل** مسار الأقسام، وإلا التقطه
+        // `admin_category_save` لأن كليهما PUT على /admin/categories/{id}.
+        if ($a === 'categories' && ($s[3] ?? '') === 'filters') {
+            if ($m === 'PUT' || $m === 'PATCH' || $m === 'POST') { admin_category_filters_save((int) $id); return; }
+        }
+        if ($a === 'filters') {
+            if ($m === 'GET')                   { admin_filters_list(); return; }
+            if ($m === 'POST')                  { admin_filter_save(null); return; }
+            if ($m === 'PUT' || $m === 'PATCH') { admin_filter_save($id); return; }
+            if ($m === 'DELETE')                { admin_filter_delete((int) $id); return; }
+        }
+
         if ($a === 'categories') {
             if ($m === 'GET')                 { ok(['items' => categories_list(true)]); return; }
             if ($m === 'POST')                { admin_category_save(null); return; }
@@ -249,6 +265,8 @@ function categories_list(bool $includeInactive = false): array
     // حقول كل الأقسام في استعلام واحد
     $ids = array_map(fn($c) => (int) $c['id'], $rows);
     $fieldsMap = category_fields_map($ids);
+    // فلاتر كل الأقسام في استعلام واحد (الأساسي أولاً)
+    $filtersMap = category_filters_map($ids);
 
     $out = [];
     foreach ($rows as $c) {
@@ -256,9 +274,304 @@ function categories_list(bool $includeInactive = false): array
         $c['is_active'] = (bool) $c['is_active'];
         // الحقول الخاصة بهذا القسم (مع خياراتها)
         $c['fields'] = $fieldsMap[(int) $c['id']] ?? [];
+        // الفلاتر المُسنَدة لهذا القسم — الأساسي أولاً
+        $c['filters'] = $filtersMap[(int) $c['id']] ?? [];
         $out[] = $c;
     }
     return $out;
+}
+
+/**
+ * فلاتر كل الأقسام في استعلام واحد.
+ *
+ * المفتاح صار في القاعدة لا في كود الواجهة: كان CAT_INFO في ServicesPage
+ * يكتب «الصيدليات ← المناطق · الأطباء ← الاختصاص · السرفيس ← نوع المركبة»
+ * كتابةً، فلا يستطيع المدير تغييرها.
+ *
+ * @return array<int, array<int, array>>  category_id => قائمة الفلاتر (الأساسي أولاً)
+ */
+function category_filters_map(array $categoryIds): array
+{
+    if (!$categoryIds) {
+        return [];
+    }
+    $in = implode(',', array_map('intval', $categoryIds));
+    $sql = "SELECT cf.category_id, cf.is_primary, cf.sort_order AS link_order, cf.filter_id,
+                   f.id, f.filter_key, f.label, f.source_type, f.source_key, f.icon, f.sort_order
+            FROM category_filters cf
+            JOIN filters f ON f.id = cf.filter_id
+            WHERE cf.category_id IN ($in) AND cf.is_active = 1 AND f.is_active = 1
+            ORDER BY cf.category_id, cf.is_primary DESC, cf.sort_order, f.sort_order, f.id";
+
+    $map = [];
+    foreach (db()->query($sql) as $r) {
+        $cid = (int) $r['category_id'];
+        $map[$cid][] = [
+            'id'          => (int) $r['id'],
+            'filter_id'   => (int) $r['filter_id'],   // معرّف الفلتر في المكتبة
+            'key'         => (string) $r['filter_key'],
+            'label'       => (string) $r['label'],
+            'source_type' => (string) $r['source_type'],   // region | specialty | field
+            'source_key'  => (string) $r['source_key'],    // مفتاح الحقل عند field
+            'icon'        => (string) ($r['icon'] ?? ''),
+            'is_primary'  => (bool) $r['is_primary'],
+            'sort_order'  => (int) $r['sort_order'],
+        ];
+    }
+    return $map;
+}
+
+/** مكتبة الفلاتر كاملة (للوحة التحكم) */
+function filters_list(bool $includeInactive = false): array
+{
+    $sql = "SELECT * FROM filters" . ($includeInactive ? "" : " WHERE is_active = 1")
+         . " ORDER BY sort_order, id";
+    $out = [];
+    foreach (db()->query($sql) as $f) {
+        $out[] = [
+            'id'          => (int) $f['id'],
+            'key'         => (string) $f['filter_key'],
+            'label'       => (string) $f['label'],
+            'source_type' => (string) $f['source_type'],
+            'source_key'  => (string) ($f['source_key'] ?? ''),
+            'icon'        => (string) ($f['icon'] ?? ''),
+            'sort_order'  => (int) $f['sort_order'],
+            'is_active'   => (bool) $f['is_active'],
+        ];
+    }
+    return $out;
+}
+
+/** كم قسماً يستخدم كل فلتر — يُعرض في المكتبة ويمنع الحذف المفاجئ */
+function filter_usage_counts(): array
+{
+    $out = [];
+    foreach (db()->query("SELECT filter_id, COUNT(*) c FROM category_filters GROUP BY filter_id") as $r) {
+        $out[(int) $r['filter_id']] = (int) $r['c'];
+    }
+    return $out;
+}
+
+// =============================================================
+// إدارة الفلاتر من لوحة التحكم
+// =============================================================
+
+/** GET /api/admin/filters */
+function admin_filters_list(): void
+{
+    $usage = filter_usage_counts();
+    $items = filters_list(true);
+    foreach ($items as &$f) {
+        $f['used_by'] = $usage[$f['id']] ?? 0;
+    }
+    unset($f);
+    ok(['items' => $items, 'sources' => filter_sources()]);
+}
+
+/**
+ * المصادر المتاحة للفلترة — تُبنى من البيانات الفعلية:
+ *  • المناطق (جدول regions) · الاختصاص (جدول specialties)
+ *  • كل حقل قائمة في الأقسام (نوع المركبة · اتجاه السفر · اختصاص…)
+ */
+function filter_sources(): array
+{
+    $out = [
+        ['source_type' => 'region',    'source_key' => '', 'label' => 'المناطق',  'hint' => 'من جدول المناطق'],
+        ['source_type' => 'specialty', 'source_key' => '', 'label' => 'الاختصاص', 'hint' => 'من جدول الاختصاصات'],
+    ];
+    // «specialty» و«region» أعلاه فلتران عامّان — لا نُكرّرهما كمصدر حقل
+    $builtin = ['specialty' => true, 'region' => true, 'governorate' => true];
+    $rows = db()->query("SELECT DISTINCT f.field_key, f.label, c.name AS cat_name, c.id AS cat_id
+                         FROM category_fields f
+                         JOIN categories c ON c.id = f.category_id
+                         WHERE f.type = 'select' AND f.is_active = 1
+                         ORDER BY c.id, f.sort_order, f.id")->fetchAll();
+    foreach ($rows as $r) {
+        if (isset($builtin[(string) $r['field_key']])) {
+            continue;
+        }
+        $out[] = [
+            'source_type' => 'field',
+            'source_key'  => (string) $r['field_key'],
+            'label'       => (string) $r['label'],
+            'hint'        => 'حقل في قسم ' . $r['cat_name'],
+        ];
+    }
+    return $out;
+}
+
+/** POST /api/admin/filters  ·  PUT /api/admin/filters/{id} */
+function admin_filter_save(?int $id): void
+{
+    $b = body();
+    $label = str_trim($b['label'] ?? '', 60);
+    if ($label === '') {
+        fail('اسم الفلتر مطلوب');
+    }
+
+    $sourceType = in_arr($b['source_type'] ?? 'region', ['region', 'specialty', 'field'], 'region');
+    $sourceKey  = '';
+    if ($sourceType === 'field') {
+        $sourceKey = str_trim($b['source_key'] ?? '', 60);
+        if ($sourceKey === '') {
+            fail('اختر الحقل الذي يبني عليه الفلتر');
+        }
+        $exists = db()->prepare("SELECT COUNT(*) FROM category_fields WHERE field_key = ?");
+        $exists->execute([$sourceKey]);
+        if ((int) $exists->fetchColumn() === 0) {
+            fail('الحقل المختار غير موجود في أي قسم');
+        }
+    }
+
+    // ─── المفتاح ───
+    // ثابت عند التعديل: لا يتغيّر إن لم يُرسل صراحةً، وإلا انكسرت الإشارة
+    // إليه في أي مكان آخر (كان تعديل «المناطق» بلا key يجعله flt-region).
+    $key = preg_replace('/[^a-z0-9\-_]/', '', strtolower(str_trim($b['key'] ?? '', 40)));
+    if ($key === '' && $id) {
+        $stk = db()->prepare("SELECT filter_key FROM filters WHERE id = ?");
+        $stk->execute([$id]);
+        $key = (string) ($stk->fetchColumn() ?: '');
+    }
+    if ($key === '') {
+        $key = 'flt-' . ($sourceType === 'field'
+            ? preg_replace('/[^a-z0-9\-_]/', '', strtolower($sourceKey))
+            : $sourceType);
+        // مفتاح فريد: أضف لاحقة إن كان مشغولاً بفلتر آخر
+        $base = $key;
+        $i = 2;
+        $chk = db()->prepare("SELECT COUNT(*) FROM filters WHERE filter_key = ?" . ($id ? " AND id <> ?" : ""));
+        while (true) {
+            $chk->execute($id ? [$key, $id] : [$key]);
+            if ((int) $chk->fetchColumn() === 0) {
+                break;
+            }
+            $key = $base . '-' . $i++;
+        }
+    }
+
+    $data = [
+        'filter_key'  => $key,
+        'label'       => $label,
+        'source_type' => $sourceType,
+        'source_key'  => $sourceKey,
+        'icon'        => str_trim($b['icon'] ?? '', 40),
+        'sort_order'  => (int) ($b['sort_order'] ?? 0),
+        'is_active'   => !array_key_exists('is_active', $b) ? 1 : (int) (!empty($b['is_active'])),
+    ];
+
+    if ($id) {
+        // منع تكرار المفتاح على فلتر آخر
+        $dup = db()->prepare("SELECT COUNT(*) FROM filters WHERE filter_key = ? AND id <> ?");
+        $dup->execute([$key, $id]);
+        if ((int) $dup->fetchColumn() > 0) {
+            fail('هذا المفتاح مستخدم في فلتر آخر');
+        }
+        $sets = implode(', ', array_map(fn($k) => "$k = :$k", array_keys($data)));
+        $data['id'] = $id;
+        db()->prepare("UPDATE filters SET $sets WHERE id = :id")->execute($data);
+        log_activity('update', 'filter', $id, 'عدّل فلتر: ' . $label, 'admin', (int) (current_user()['id'] ?? 0));
+        ok(['id' => $id, 'message' => 'تم تحديث الفلتر']);
+    }
+
+    db()->prepare("INSERT INTO filters (filter_key,label,source_type,source_key,icon,sort_order,is_active,created_at)
+                   VALUES (:filter_key,:label,:source_type,:source_key,:icon,:sort_order,:is_active,:created_at)")
+        ->execute($data + ['created_at' => app_now()->format('Y-m-d H:i:s')]);
+    $newId = (int) db()->lastInsertId();
+    log_activity('create', 'filter', $newId, 'أضاف فلتر: ' . $label, 'admin', (int) (current_user()['id'] ?? 0));
+    ok(['id' => $newId, 'message' => 'تمت إضافة الفلتر — أسنِده لأقسامه الآن']);
+}
+
+/** DELETE /api/admin/filters/{id} */
+function admin_filter_delete(int $id): void
+{
+    $st = db()->prepare("SELECT label FROM filters WHERE id = ?");
+    $st->execute([$id]);
+    $label = $st->fetchColumn();
+    if ($label === false) {
+        fail('الفلتر غير موجود — ربما حُذف مسبقاً', 404);
+    }
+
+    $uc = db()->prepare("SELECT COUNT(*) FROM category_filters WHERE filter_id = ?");
+    $uc->execute([$id]);
+    $used = (int) $uc->fetchColumn();
+
+    db()->prepare("DELETE FROM category_filters WHERE filter_id = ?")->execute([$id]);
+    db()->prepare("DELETE FROM filters WHERE id = ?")->execute([$id]);
+    log_activity('delete', 'filter', $id, 'حذف فلتر: ' . $label, 'admin', (int) (current_user()['id'] ?? 0));
+
+    ok(['message' => $used > 0
+        ? "تم حذف الفلتر، وأُزيل إسناده من $used قسماً"
+        : 'تم حذف الفلتر']);
+}
+
+/**
+ * PUT /api/admin/categories/{id}/filters
+ * يستبدل إسناد الفلاتر للقسم دفعة واحدة.
+ *
+ * body: { filters: [ {filter_id, is_primary, sort_order}, … ] }
+ * القسم بلا فلاتر = يُعرض كقائمة عادية بلا بطاقات تجميع.
+ */
+function admin_category_filters_save(int $categoryId): void
+{
+    $st = db()->prepare("SELECT name FROM categories WHERE id = ?");
+    $st->execute([$categoryId]);
+    $catName = $st->fetchColumn();
+    if ($catName === false) {
+        fail('القسم غير موجود', 404);
+    }
+
+    $items = body()['filters'] ?? [];
+    if (!is_array($items)) {
+        fail('صيغة الفلاتر غير صحيحة');
+    }
+
+    $valid = [];
+    foreach (db()->query("SELECT id FROM filters") as $r) {
+        $valid[(int) $r['id']] = true;
+    }
+
+    $rows = [];
+    $primarySeen = false;
+    foreach (array_values($items) as $i => $it) {
+        $fid = (int) ($it['filter_id'] ?? 0);
+        if (!isset($valid[$fid])) {
+            continue;   // فلتر محذوف أو مُعرّف خاطئ — نتجاهله بهدوء
+        }
+        // فلتر أساسي واحد فقط لكل قسم: أول واحد يُعلَّم أساسياً هو المعتمد
+        $isPrimary = !empty($it['is_primary']) && !$primarySeen;
+        if ($isPrimary) {
+            $primarySeen = true;
+        }
+        $rows[] = [$categoryId, $fid, $isPrimary ? 1 : 0, (int) ($it['sort_order'] ?? $i)];
+    }
+
+    // إن لم يُعلَّم أي فلتر أساسياً، خُذ الأول حتى لا تفقد الصفحة بطاقات التجميع
+    if (!$primarySeen && $rows) {
+        $rows[0][2] = 1;
+    }
+
+    $pdo = db();
+    $pdo->beginTransaction();
+    try {
+        $pdo->prepare("DELETE FROM category_filters WHERE category_id = ?")->execute([$categoryId]);
+        $ins = $pdo->prepare("INSERT INTO category_filters (category_id, filter_id, is_primary, sort_order, is_active, created_at)
+                              VALUES (?,?,?,?,1,?)");
+        $now = app_now()->format('Y-m-d H:i:s');
+        foreach ($rows as $r) {
+            $ins->execute([$r[0], $r[1], $r[2], $r[3], $now]);
+        }
+        $pdo->commit();
+    } catch (\Throwable $e) {
+        $pdo->rollBack();
+        fail('تعذّر حفظ الفلاتر');
+    }
+
+    log_activity('update', 'category', $categoryId,
+        'عدّل فلاتر قسم: ' . $catName . ' (' . count($rows) . ')', 'admin', (int) (current_user()['id'] ?? 0));
+
+    ok(['count' => count($rows), 'message' => $rows
+        ? 'تم حفظ فلاتر القسم'
+        : 'تم إلغاء فلاتر القسم — ستُعرض خدماته بلا تجميع']);
 }
 
 /** قائمة المحافظات النشطة */
@@ -638,6 +951,29 @@ function api_services(): void
         }));
     }
 
+    // ════════════════════════════════════════════════════════════
+    //  تجميع حسب الفلاتر المُسنَدة للقسم
+    // ════════════════════════════════════════════════════════════
+    //
+    //  يُحسب من **كل** الخدمات المُرشَّحة قبل ترقيم الصفحات، فلا تنقص
+    //  العدّادات عند تجاوز الشريحة الأولى. الواجهة ترسم بطاقات المستوى
+    //  الأول من هنا مباشرة، وتُصفّي محلياً عند اختيار بطاقة — فتبقى
+    //  عدّادات بقية البطاقات ظاهرة (اختيار منطقة لا يُصفّر باقي المناطق).
+    $catIdForFilters = 0;
+    if ($cid0 = arg('category_id')) {
+        if (ctype_digit((string) $cid0)) {
+            $catIdForFilters = (int) $cid0;
+        } else {
+            $stc = $pdo->prepare("SELECT id FROM categories WHERE slug = ?");
+            $stc->execute([(string) $cid0]);
+            $catIdForFilters = (int) ($stc->fetchColumn() ?: 0);
+        }
+    }
+    $filterGroups = [];
+    foreach ((category_filters_map([$catIdForFilters])[$catIdForFilters] ?? []) as $flt) {
+        $filterGroups[$flt['key']] = group_services_by_filter($items, $flt);
+    }
+
     // تجميع حسب المنطقة
     $groups = [];
     foreach ($items as $i) {
@@ -685,9 +1021,104 @@ function api_services(): void
         'limit'       => $limit,
         'open_now'    => count(array_filter($items, fn($i) => $i['status'] === 'open')),
         'on_duty'     => count(array_filter($items, fn($i) => $i['on_duty'])),
-        'regions'     => $groups,
+        'regions'     => $groups,          // توافق خلفي (تطبيق أندرويد)
+        'groups'      => $filterGroups,    // مجمّعة بمفتاح الفلتر: { region: [...], flt-vehicle: [...] }
         'time'        => app_now()->format('c'),
     ]);
+}
+
+/**
+ * تجميع خدمات في بطاقات حسب فلتر واحد.
+ *
+ * الفلتر ثلاثة أنواع، وكلها تُخرج الشكل نفسه للواجهة:
+ *   region    → المنطقة (من عمود region_id)
+ *   specialty → الاختصاص (من عمود specialty_id)
+ *   field     → حقل قائمة محلول مسبقاً في $item['fields']
+ *               (نوع المركبة · اتجاه السفر · أي حقل «قابل للفلترة»)
+ *
+ * الخدمة التي ينقصها الحقل تُجمَّع في «غير محدد» ولا تُختفي تماماً —
+ * وإلا صارت خدمات موجودة لا يمكن الوصول إليها من أي بطاقة.
+ *
+ * @param  array $items  خدمات مُشكَّلة بـ shape_service
+ * @param  array $filter سطر من category_filters_map
+ * @return array<int, array{key:string,label:string,icon:string,total:int,open:int,on_duty:int}>
+ */
+function group_services_by_filter(array $items, array $filter): array
+{
+    $type  = (string) $filter['source_type'];
+    $srcKey = (string) ($filter['source_key'] ?? '');
+    $buckets = [];
+
+    $bump = function (string $key, string $label, string $icon, array $i) use (&$buckets): void {
+        if (!isset($buckets[$key])) {
+            $buckets[$key] = ['key' => $key, 'label' => $label, 'icon' => $icon, 'total' => 0, 'open' => 0, 'on_duty' => 0];
+        }
+        $buckets[$key]['total']++;
+        if (($i['status'] ?? '') === 'open') { $buckets[$key]['open']++; }
+        if (!empty($i['on_duty']))           { $buckets[$key]['on_duty']++; }
+    };
+
+    foreach ($items as $i) {
+        if ($type === 'region') {
+            $rid = $i['region_id'];
+            $bump(
+                $rid !== null ? (string) $rid : '__none',
+                $i['region_name'] ?? 'غير محدد',
+                'map-pin',
+                $i
+            );
+            continue;
+        }
+
+        if ($type === 'specialty') {
+            $sid = $i['specialty_id'];
+            if ($sid === null || $sid === '') {
+                $bump('__none', 'غير محدد', 'stethoscope', $i);
+                continue;
+            }
+            $name  = specialty_name((int) $sid);
+            $bump((string) $sid, $name['label'], $name['icon'], $i);
+            continue;
+        }
+
+        // ─── حقل قائمة: القيمة محلولة سلفاً في shape_service ───
+        // resolve_service_fields طابق المُعرّف أو النص أو رقم الخيار،
+        // فأصبح هنا display و icon جاهزين بلا منطق مطابقة مكرّر.
+        $resolved = null;
+        foreach (($i['fields'] ?? []) as $fld) {
+            if (($fld['key'] ?? '') === $srcKey) { $resolved = $fld; break; }
+        }
+        if ($resolved === null || (string) ($resolved['value'] ?? '') === '') {
+            $bump('__none', 'غير محدد', 'circle-dot', $i);
+            continue;
+        }
+        $bump((string) $resolved['value'], (string) $resolved['display'], (string) ($resolved['icon'] ?? ''), $i);
+    }
+
+    $out = array_values($buckets);
+    // الأكثر إشارةً أولاً («تعمل» ثم الحجم) — و«غير محدد» آخر القائمة دائماً
+    usort($out, function ($a, $b) {
+        if (($a['key'] === '__none') !== ($b['key'] === '__none')) {
+            return $a['key'] === '__none' ? 1 : -1;
+        }
+        return ($b['open'] <=> $a['open'])
+            ?: ($b['total'] <=> $a['total'])
+            ?: strcmp($a['label'], $b['label']);
+    });
+    return $out;
+}
+
+/** اسم وأيقونة اختصاص — مع تخزين مؤقت لأن التجميع يستدعيه لكل خدمة */
+function specialty_name(int $id): array
+{
+    static $cache = null;
+    if ($cache === null) {
+        $cache = [];
+        foreach (db()->query("SELECT id, name, icon FROM specialties") as $r) {
+            $cache[(int) $r['id']] = ['label' => (string) $r['name'], 'icon' => (string) ($r['icon'] ?? '')];
+        }
+    }
+    return $cache[$id] ?? ['label' => 'اختصاص #' . $id, 'icon' => ''];
 }
 
 function api_service_detail(int $id): void

@@ -3326,3 +3326,95 @@ dialog.modal.modal--wide {
 /* الإجراءات: زر الحذف محاذٍ لأزرار الموافقة/الرفض بنفس الارتفاع */
 .req-actions { align-items: center; flex-wrap: wrap; }
 .req-actions .iconbtn { flex: none; }
+
+/* ══════════════════════════════════════════════════════════════
+   تبويب الفلاتر — مكتبة الفلاتر وإسنادها للأقسام
+   ══════════════════════════════════════════════════════════════ */
+
+.admin-sec-title {
+  display: flex; align-items: center; gap: 8px;
+  margin: 22px 0 10px;
+  font-size: 0.98rem; font-weight: 800; color: var(--text);
+}
+.admin-sec-title:first-of-type { margin-top: 4px; }
+
+.admin-note {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  background: var(--bg2);
+  border: 1px solid var(--border-light);
+  border-right: 3px solid var(--accent);
+  border-radius: var(--radius);
+  font-size: 0.8rem; line-height: 1.7; color: var(--text2);
+}
+.admin-note strong { color: var(--text); }
+
+.admin-sub { font-size: 0.74rem; color: var(--text2); margin-top: 2px; }
+.admin-sub code {
+  background: var(--bg2); padding: 1px 5px; border-radius: 4px;
+  font-size: 0.72rem; direction: ltr; display: inline-block;
+}
+.admin-empty { text-align: center; color: var(--text2); padding: 22px 12px; }
+.admin-table tr.is-muted td { opacity: 0.55; }
+
+/* شارة الفلتر المُسنَد — تُميّز الأساسي */
+.fchip {
+  display: inline-flex; align-items: center; gap: 4px;
+  margin: 2px 0 2px 4px; padding: 3px 9px;
+  border: 1px solid var(--border); border-radius: 14px;
+  background: var(--bg); color: var(--text2);
+  font-size: 0.74rem; font-weight: 600;
+}
+.fchip.is-primary {
+  border-color: var(--accent);
+  background: var(--accent-bg, rgba(46,196,182,0.12));
+  color: var(--accent);
+}
+
+/* خلية القسم: أيقونة + اسم */
+.cat-cell { display: inline-flex; align-items: center; gap: 7px; }
+
+/* جدول اختيار الفلاتر داخل النافذة */
+.admin-table--pick td { vertical-align: middle; }
+.admin-table--pick tr.is-picked td { background: var(--accent-bg, rgba(46,196,182,0.07)); }
+.admin-table--pick input[type="radio"],
+.admin-table--pick input[type="checkbox"] { width: 16px; height: 16px; cursor: pointer; accent-color: var(--accent); }
+.admin-table--pick input[type="radio"]:disabled { cursor: not-allowed; opacity: 0.35; }
+
+/* زر ثانوي شفّاف (تعديل الفلاتر) */
+.btn--ghost {
+  background: transparent; color: var(--text2);
+  border: 1px solid var(--border);
+  display: inline-flex; align-items: center; gap: 5px;
+}
+.btn--ghost:hover { border-color: var(--accent); color: var(--accent); }
+
+.field__help { display: block; margin-top: 6px; font-size: 0.75rem; color: var(--text2); }
+
+.badge--off { background: var(--bg2); color: var(--text2); border-color: var(--border); }
+
+/* ══════════════════════════════════════════════════════════════
+   الفلاتر الثانوية في شريط صفحة القسم
+   تظهر فقط إن أسنَد المدير أكثر من فلتر واحد للقسم
+   ══════════════════════════════════════════════════════════════ */
+.svc-select {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 4px 10px;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.svc-select__lbl {
+  font-size: 0.74rem; font-weight: 700; color: var(--text2); white-space: nowrap;
+}
+.svc-select select {
+  border: none; background: transparent; color: var(--text);
+  font-family: var(--font); font-size: 0.8rem; font-weight: 600;
+  cursor: pointer; max-width: 190px; padding: 2px 0;
+}
+.svc-select select:focus { outline: none; }
+
+@media (max-width: 640px) {
+  .svc-select { width: 100%; justify-content: space-between; }
+  .svc-select select { max-width: none; flex: 1; }
+}

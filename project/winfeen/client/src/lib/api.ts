@@ -2,7 +2,7 @@ import type {
   Governorate,
   AdminStats, ActivityItem, Category, MetaResponse, Region, Service,
   ServiceListResponse, ServiceRequest, Settings, User, ScheduleRow, Specialty,
-  CategoryField, FieldOption,
+  CategoryField, FieldOption, Filter, FilterSourceOption,
 } from './types'
 import { getBasePath } from './basePath'
 
@@ -155,6 +155,19 @@ export const api = {
       request<{ id: number; message: string }>(`/admin/category-fields/${fieldId}/options/${optionId}`, { method: 'PUT', body: payload }),
     deleteOption: (fieldId: number, optionId: number) =>
       request<{ message: string }>(`/admin/category-fields/${fieldId}/options/${optionId}`, { method: 'DELETE' }),
+
+    // ─── الفلاتر ───
+    // مكتبة الفلاتر + المصادر المتاحة + إسنادها للأقسام
+    filters: () => request<{ items: Filter[]; sources: FilterSourceOption[] }>('/admin/filters'),
+    createFilter: (payload: Partial<Filter>) =>
+      request<{ id: number; message: string }>('/admin/filters', { method: 'POST', body: payload }),
+    updateFilter: (id: number, payload: Partial<Filter>) =>
+      request<{ id: number; message: string }>(`/admin/filters/${id}`, { method: 'PUT', body: payload }),
+    deleteFilter: (id: number) =>
+      request<{ message: string }>(`/admin/filters/${id}`, { method: 'DELETE' }),
+    /** يستبدل فلاتر القسم دفعة واحدة — الأساسي أولاً */
+    setCategoryFilters: (categoryId: number, filters: Array<{ filter_id: number; is_primary: boolean; sort_order: number }>) =>
+      request<{ count: number; message: string }>(`/admin/categories/${categoryId}/filters`, { method: 'PUT', body: { filters } }),
 
     regions: (zone?: string) => request<{ items: Region[] }>(`/admin/regions${q({ zone })}`),
     governorates: () => request<{ items: Governorate[] }>('/admin/governorates'),

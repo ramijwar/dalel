@@ -2,27 +2,36 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { useStore } from '../lib/store'
 import { api } from '../lib/api'
-import type { RegionGroup, Service, Specialty } from '../lib/types'
+import type { GroupCard, Service } from '../lib/types'
+import {
+  primaryFilter,
+  secondaryFilters,
+  groupsFor,
+  matchesGroup,
+  matchesSecondary,
+  secondaryOptions,
+  type SecondaryState,
+} from '../lib/grouping'
 import ServiceCard from '../components/ServiceCard'
 import MiniServiceCard from '../components/MiniServiceCard'
 import ServicePanel from '../components/ServicePanel'
 import Icon from '../components/Icon'
 import CatIcon from '../components/CatIcon'
-import { fmtDateTime, vehicleIcon } from '../lib/utils'
+import { fmtDateTime } from '../lib/utils'
 
-/** إعدادات كل قسم: العناوين وطريقة تجميع البطاقات */
+/**
+ * إعدادات العرض لكل قسم — العنوان والوحدة وطريقة البطاقات.
+ *
+ * ملاحظة مهمة: «أي فلتر يقود أي قسم» لم يبقَ هنا. كان في هذا الملف
+ * `group: 'region' | 'specialty' | 'meta'` مكتوباً بالكود، فلم يستطع
+ * المدير تغييره. صار الآن في قاعدة البيانات:
+ *   filters (المكتبة) + category_filters (الإسناد) ← لوحة التحكم › الفلاتر
+ */
 interface CatCfg {
   title: string
   desc: string
   unit: string
   unitPlural: string
-  /** region  : التجميع بالمنطقة (من قاعدة البيانات)
-   *  specialty: التجميع بالاختصاص الطبي (من قاعدة البيانات)
-   *  meta    : التجميع من حقل meta محلياً (vehicle / market) */
-  group: 'region' | 'specialty' | 'meta'
-  /** المفتاح داخل meta عند group = 'meta' */
-  metaKey?: string
-  groupTitle: string
   /** بطاقات مُصغّرة (أيقونة + اسم + نقطة حالة) مع لوحة تفاصيل سفلية */
   mini?: boolean
   /** طريقة العرض الافتراضية لهذا القسم */
@@ -32,20 +41,19 @@ interface CatCfg {
 const CAT_INFO: Record<string, CatCfg> = {
   pharmacies: {
     title: 'الصيدليات المناوبة', desc: 'حالة الصيدليات وآخر تحديثات المناوبة',
-    unit: 'صيدلية', unitPlural: 'صيدليات', group: 'region', groupTitle: 'المناطق', mini: true,
+    unit: 'صيدلية', unitPlural: 'صيدليات', mini: true,
   },
   doctors: {
     title: 'الأطباء المختصون', desc: 'اختصاصات الأطباء ومواعيد عياداتهم',
-    unit: 'طبيب', unitPlural: 'أطباء', group: 'specialty', groupTitle: 'الاختصاصات', mini: true,
+    unit: 'طبيب', unitPlural: 'أطباء', mini: true,
   },
   stations: {
     title: 'الكازيات', desc: 'حالة محطات الوقود لحظةً بلحظة',
-    unit: 'محطة', unitPlural: 'محطات', group: 'region', groupTitle: 'المناطق', mini: true,
+    unit: 'محطة', unitPlural: 'محطات', mini: true,
   },
   transport: {
     title: 'سرافيس وباصات', desc: 'خطوط النقل ومخطط الرحلة',
-    unit: 'مركبة', unitPlural: 'مركبات', group: 'meta', metaKey: 'vehicle', groupTitle: 'نوع المركبة',
-    mini: false, defaultLayout: 'list',
+    unit: 'مركبة', unitPlural: 'مركبات', mini: false, defaultLayout: 'list',
   },
 }
 
@@ -71,31 +79,6 @@ const STATUS_OPTS = [
   { v: 'manual', label: 'تحديث يدوي' },
 ]
 
-interface GroupCard {
-  key: string
-  label: string
-  icon: string
-  total: number
-  open: number
-}
-
-/** مفتاح التجميع المحلي من حقل meta */
-function metaGroup(s: Service, metaKey: string): { key: string; label: string; icon: string } {
-  const m = (s.meta ?? {}) as Record<string, any>
-  if (metaKey === 'vehicle') {
-    const k = String(m.vehicle || 'أخرى')
-    return { key: k, label: k, icon: vehicleIcon(m.vehicle) }
-  }
-  // بازارات: النوع + اليوم
-  const type = String(m.market_type || 'أخرى')
-  const day = String(m.day || '')
-  return {
-    key: day ? `${type} · ${day}` : type,
-    label: day || type,
-    icon: type === 'دائم' ? '🏪' : '📅',
-  }
-}
-
 export default function ServicesPage() {
   const { slug } = useParams<{ slug: string }>()
   const { categories, settings, governorates } = useStore()
@@ -106,44 +89,45 @@ export default function ServicesPage() {
     desc: cat?.description ?? '',
     unit: 'خدمة',
     unitPlural: 'خدمات',
-    group: 'region',
-    groupTitle: 'المناطق',
   }
 
+  // ─── الفلاتر المُسنَدة للقسم (من لوحة التحكم) ───
+  const primary = primaryFilter(cat?.filters)
+  const secondary = secondaryFilters(cat?.filters)
+
   const [items, setItems] = useState<Service[]>([])
-  const [regionGroups, setRegionGroups] = useState<RegionGroup[]>([])
-  const [specialties, setSpecialties] = useState<Specialty[]>([])
+  const [loading, setLoading] = useState(true)
+  /** تجميعات الخادم بمفتاح الفلتر — تُحسب قبل ترقيم الصفحات */
+  const [groups, setGroups] = useState<Record<string, GroupCard[]>>({})
   const [openNow, setOpenNow] = useState(0)
   const [total, setTotal] = useState(0)
-  const [loading, setLoading] = useState(true)
   const [updatedAt, setUpdatedAt] = useState<string>('')
 
   const [zone, setZone] = useState('')
   const [govId, setGovId] = useState('')
   const [status, setStatus] = useState('')
-  const [regionId, setRegionId] = useState<number | null>(null)
-  const [specialtyId, setSpecialtyId] = useState<number | null>(null)
+  /** مفتاح البطاقة المختارة من الفلتر الأساسي */
   const [groupKey, setGroupKey] = useState<string | null>(null)
+  /** قيم الفلاتر الثانوية: مفتاح الفلتر ← القيمة */
+  const [secondaryState, setSecondaryState] = useState<SecondaryState>({})
   const [q, setQ] = useState('')
   const [layout, setLayout] = useState<'card' | 'list'>('card')
   /** الخدمة المختارة التي تُعرض بياناتها في اللوحة السفلية */
   const [picked, setPicked] = useState<Service | null>(null)
 
-  const stateRef = useRef({ zone, status, regionId, specialtyId, q, govId })
-  stateRef.current = { zone, status, regionId, specialtyId, q, govId }
+  const stateRef = useRef({ zone, status, q, govId })
+  stateRef.current = { zone, status, q, govId }
 
   const load = useCallback(async () => {
+    const s = stateRef.current
+    const params: Record<string, any> = { category_id: slug, limit: 300, sort: 'open_first' }
+    if (s.zone) params.zone = s.zone
+    if (s.govId) params.governorate_id = s.govId
+    if (s.status) params.status = s.status
+    if (s.q) params.q = s.q
+
     setLoading(true)
     try {
-      const s = stateRef.current
-      const params: Record<string, any> = { category_id: slug, limit: 300, sort: 'open_first' }
-      if (s.zone) params.zone = s.zone
-      if (s.govId) params.governorate_id = s.govId
-      if (s.regionId) params.region_id = s.regionId
-      if (s.specialtyId) params.specialty_id = s.specialtyId
-      if (s.status) params.status = s.status
-      if (s.q) params.q = s.q
-
       const r = await api.services(params)
 
       // ─── شبكة أمان: جلبة بقية الصفحات إن تجاوز العدد سقف الخادم ───
@@ -162,12 +146,13 @@ export default function ServicesPage() {
       }
 
       setItems(items)
+      setGroups(r.groups ?? {})
       setTotal(r.total)
       setOpenNow(r.open_now)
-      setRegionGroups(r.regions ?? [])
       if (r.time) setUpdatedAt(r.time)
     } catch {
       setItems([])
+      setGroups({})
     } finally {
       setLoading(false)
     }
@@ -178,7 +163,7 @@ export default function ServicesPage() {
   useEffect(() => {
     const t = window.setTimeout(load, q ? 350 : 0)
     return () => window.clearTimeout(t)
-  }, [zone, status, regionId, specialtyId, q, govId, load])
+  }, [zone, status, q, govId, load])
 
   // نبض تحديث كل 3 دقائق
   useEffect(() => {
@@ -188,115 +173,50 @@ export default function ServicesPage() {
 
   // إعادة تعيين التحديد وطريقة العرض عند تغيير القسم
   useEffect(() => {
-    setGroupKey(null); setRegionId(null); setSpecialtyId(null); setPicked(null)
+    setGroupKey(null); setSecondaryState({}); setPicked(null)
     setLayout(info.defaultLayout ?? 'card')
   }, [slug, info.defaultLayout])
 
-  // جلب الاختصاصات من قاعدة البيانات لقسم الأطباء
-  useEffect(() => {
-    if (info.group !== 'specialty') { setSpecialties([]); return }
-    api.specialties()
-      .then((d) => setSpecialties(d.items ?? []))
-      .catch(() => setSpecialties([]))
-  }, [info.group])
+  /** بطاقات المستوى الأول — من تجميع الخادم للفلتر الأساسي */
+  const cards = useMemo(() => groupsFor(primary, groups), [primary, groups])
 
-  /** هل يوجد فلتر نشط يؤثر على العدّادات؟ */
-  const hasActiveFilter =
-    govId !== '' || zone !== '' || status !== '' || q.trim() !== ''
-
-  /** بطاقات التجميع */
-  const groups = useMemo<GroupCard[]>(() => {
-    if (info.group === 'region') {
-      return regionGroups.map((r) => ({
-        key: String(r.region_id ?? ''),
-        label: r.region,
-        icon: 'map-pin',   // أيقونة موقع — لا منزل
-        total: r.total,
-        open: r.open,
-      }))
-    }
-    if (info.group === 'specialty') {
-      // ──────────────────────────────────────────────────
-      // العدّاد يجب أن يحترم الفلاتر النشطة (المحافظة/الريف/الحالة).
-      // services_count القادم من /specialties عدّاد عام يتجاهلها،
-      // لذا نحسبه محلياً من الخدمات المُفلترة (items).
-      // ──────────────────────────────────────────────────
-      const perSpec = new Map<string, { total: number; open: number }>()
-      for (const s of items) {
-        const spId = (s as any).specialty_id
-        const k = String(spId ?? '')
-        if (!spId) continue
-        const cur = perSpec.get(k) ?? { total: 0, open: 0 }
-        cur.total++
-        if (s.status === 'open') cur.open++
-        perSpec.set(k, cur)
-      }
-      return specialties
-        .map((sp) => ({
-          key: String(sp.id),
-          label: sp.name,
-          icon: sp.icon || '🩺',
-          total: perSpec.get(String(sp.id))?.total ?? 0,
-          open: perSpec.get(String(sp.id))?.open ?? 0,
-        }))
-        // الأخفاء الاختياري: لا نعرض اختصاصات بلا نتائج بعد الفلترة
-        .filter((g) => !hasActiveFilter || g.total > 0)
-        .sort((a, b) => b.total - a.total || a.label.localeCompare(b.label, 'ar'))
-    }
-    // تجميع محلي من meta
-    const map = new Map<string, GroupCard>()
-    for (const s of items) {
-      const g = metaGroup(s, info.metaKey ?? '')
-      const cur = map.get(g.key) ?? { key: g.key, label: g.label, icon: g.icon, total: 0, open: 0 }
-      cur.total++
-      if (s.status === 'open') cur.open++
-      map.set(g.key, cur)
-    }
-    return [...map.values()].sort((a, b) => b.total - a.total || a.label.localeCompare(b.label, 'ar'))
-  }, [items, regionGroups, specialties, info.group, info.metaKey, hasActiveFilter])
-
-  /** المفتاح النشط حسب وضع القسم */
-  const activeKey = info.group === 'region'
-    ? (regionId === null ? null : String(regionId))
-    : info.group === 'specialty'
-      ? (specialtyId === null ? null : String(specialtyId))
-      : groupKey
-
-  const selectedGroup = useMemo(
-    () => (activeKey === null ? null : groups.find((g) => g.key === activeKey) ?? null),
-    [groups, activeKey],
+  const selectedCard = useMemo(
+    () => (groupKey === null ? null : cards.find((g) => g.key === groupKey) ?? null),
+    [cards, groupKey],
   )
 
   /**
-   * العناصر الظاهرة — تُصفَّى محلياً في وضع meta (تجميع «نوع المركبة»).
+   * الخدمات الظاهرة:
+   *  ١. خدمات البطاقة المختارة من الفلتر الأساسي
+   *  ٢. ثم الفلاتر الثانوية المُسنَدة للقسم (إن وُجدت)
    *
-   * ملاحظة: كان هنا شريط «فلاتر الحقول الديناميكية» أعلى الصفحة، أُزيل
-   * بأمر المستخدم لأنه يكرّر بنية القسم نفسها — قسم الأطباء يُجمّع أصلاً
-   * بالاختصاص، وقسم السرفيس يُجمّع أصلاً بنوع المركبة، فبطاقات التجميع
-   * (المستوى الأول: بطاقات التجميع) هي الفلتر الأساسي وتكفي.
+   * التصفية محلية لأن الخادم أرسل كل خدمات القسم مع فلاتر
+   * المحافظة/النطاق/الحالة/البحث مطبَّقة — فلا طلب شبكة عند اختيار بطاقة.
    */
   const visibleItems = useMemo(() => {
-    if (info.group !== 'meta' || !groupKey) return items
-    return items.filter((s) => metaGroup(s, info.metaKey ?? '').key === groupKey)
-  }, [items, groupKey, info.group, info.metaKey])
+    let out = items
+    if (primary && groupKey !== null) {
+      out = out.filter((s) => matchesGroup(s, primary, groupKey))
+    }
+    if (secondary.length) {
+      out = out.filter((s) => matchesSecondary(s, secondary, secondaryState))
+    }
+    return out
+  }, [items, primary, groupKey, secondary, secondaryState])
 
   const selectGroup = (key: string | null) => {
     setPicked(null)
-    if (info.group === 'region') setRegionId(key === null ? null : Number(key))
-    else if (info.group === 'specialty') setSpecialtyId(key === null ? null : Number(key))
-    else setGroupKey(groupKey === key ? null : key)
+    setGroupKey((cur) => (cur === key ? null : key))
   }
 
   // إسقاط الخدمة المختارة عند تغيير الفلاتر أو القسم
-  useEffect(() => { setPicked(null) }, [slug, zone, status, q, govId])
+  useEffect(() => { setPicked(null) }, [slug, zone, status, q, govId, groupKey, secondaryState])
 
   const unitLabel = total === 1 ? info.unit
     : (total >= 3 && total <= 10 ? info.unitPlural : info.unit)
 
   return (
-    <main className="page svc-page">
-
-      {/* ── الترويسة ── */}
+    <main className="page">
       <header className="svc-head">
         <Link to="/" className="back-btn"><Icon name="arrowRight" size={18} /> الرئيسية</Link>
         <div className="svc-head__row">
@@ -312,14 +232,14 @@ export default function ServicesPage() {
           <Icon name="map" size={14} />
           <button
             className={`seg__btn ${govId === '' ? 'is-active' : ''}`}
-            onClick={() => { setGovId(''); setRegionId(null); setGroupKey(null) }}
+            onClick={() => { setGovId(''); setGroupKey(null) }}
             role="tab" aria-selected={govId === ''}
           >كل المحافظات</button>
           {governorates.map((g) => (
             <button
               key={g.id}
               className={`seg__btn ${String(govId) === String(g.id) ? 'is-active' : ''}`}
-              onClick={() => { setGovId(String(g.id)); setRegionId(null); setGroupKey(null) }}
+              onClick={() => { setGovId(String(g.id)); setGroupKey(null) }}
               role="tab" aria-selected={String(govId) === String(g.id)}
             >{g.name}</button>
           ))}
@@ -332,7 +252,7 @@ export default function ServicesPage() {
           <button
             key={z.v}
             className={`seg__btn ${zone === z.v ? 'is-active' : ''}`}
-            onClick={() => { setZone(z.v); setRegionId(null); setGroupKey(null) }}
+            onClick={() => { setZone(z.v); setGroupKey(null) }}
             role="tab"
             aria-selected={zone === z.v}
           >
@@ -362,6 +282,23 @@ export default function ServicesPage() {
         </div>
 
         <div className="svc-bar__tools">
+          {/* الفلاتر الثانوية: تظهر فقط إن أسنَد المدير أكثر من فلتر للقسم */}
+          {secondary.map((f) => (
+            <label key={f.key} className="svc-select">
+              <span className="svc-select__lbl">{f.label}</span>
+              <select
+                value={secondaryState[f.key] ?? ''}
+                onChange={(e) => setSecondaryState((s) => ({ ...s, [f.key]: e.target.value }))}
+                aria-label={f.label}
+              >
+                <option value="">الكل</option>
+                {secondaryOptions(f, groups).map((o) => (
+                  <option key={o.key} value={o.key}>{o.label} ({o.total})</option>
+                ))}
+              </select>
+            </label>
+          ))}
+
           <div className="search-input">
             <Icon name="search" size={16} />
             <input
@@ -397,61 +334,72 @@ export default function ServicesPage() {
         </div>
       </div>
 
-      {/* ═══ المستوى الأول: بطاقات التجميع ═══ */}
-      <section className="regions" aria-label={info.groupTitle}>
-        <div className="regions__head">
-          <h2><Icon name="pin" size={16} /> {info.groupTitle}</h2>
-          {selectedGroup && (
-            <button className="regions__clear" onClick={() => selectGroup(null)}>
-              <Icon name="x" size={13} /> إلغاء تحديد {selectedGroup.label}
-            </button>
-          )}
-        </div>
+      {/* ═══ المستوى الأول: بطاقات التجميع بحسب الفلتر الأساسي ═══ */}
+      {primary && cards.length > 0 && (
+        <section className="regions" aria-label={primary.label}>
+          <div className="regions__head">
+            <h2><CatIcon icon={primary.icon || 'filter'} size={16} /> {primary.label}</h2>
+            {selectedCard && (
+              <button className="regions__clear" onClick={() => selectGroup(null)}>
+                <Icon name="x" size={13} /> إلغاء تحديد {selectedCard.label}
+              </button>
+            )}
+          </div>
 
-        <div className="regions__grid">
-          {groups.map((g) => (
-            <button
-              key={g.key}
-              className={`rcard ${activeKey === g.key ? 'is-active' : ''}`}
-              onClick={() => selectGroup(g.key)}
-            >
-              <span className="rcard__icon"><CatIcon icon={g.icon} size={24} /></span>
-              <span className="rcard__name">{g.label}</span>
-              <span className="rcard__stat">
-                {g.open > 0 ? `${g.open} تعمل` : `${g.total}`}
-              </span>
-            </button>
-          ))}
-        </div>
-      </section>
+          <div className="regions__grid">
+            {cards.map((g) => (
+              <button
+                key={g.key}
+                className={`rcard ${groupKey === g.key ? 'is-active' : ''}`}
+                onClick={() => selectGroup(g.key)}
+              >
+                <span className="rcard__icon"><CatIcon icon={g.icon} size={24} /></span>
+                <span className="rcard__name">{g.label}</span>
+                <span className="rcard__stat">
+                  {g.open > 0 ? `${g.open} تعمل` : `${g.total}`}
+                </span>
+              </button>
+            ))}
+          </div>
+        </section>
+      )}
 
       {/* ═══ المستوى الثاني: خدمات المجموعة المختارة فقط ═══ */}
       {loading ? (
         <div className="skeletons">
           {[1, 2, 3].map((i) => <div key={i} className="skel-card" />)}
         </div>
-      ) : !selectedGroup ? (
+      ) : !primary ? (
+        /* قسم بلا فلتر مُسنَد — خدماته تُعرض كقائمة مباشرة */
+        <div className={layout === 'card' ? 'svc-grid svc-grid--compact' : 'svc-list'}>
+          {items.map((s) => <ServiceCard key={s.id} s={s} compact={layout === 'list'} />)}
+        </div>
+      ) : cards.length === 0 ? (
+        /* لا خدمات في القسم أصلاً — لا بطاقات تُختار، فلا معنى لتلميح الاختيار */
+        <div className="empty-state">
+          <span className="empty-state__icon">📭</span>
+          <h3>لا توجد خدمات بعد</h3>
+          <p>لم تُضَف خدمات إلى «{info.title}» حتى الآن.</p>
+        </div>
+      ) : !selectedCard ? (
         <div className="svc-hint">
           <span className="svc-hint__icon"><CatIcon icon={cat?.icon} size={40} /></span>
-          <h3>اختر {info.groupTitle} لعرض الخدمات</h3>
+          <h3>اختر {primary.label} لعرض الخدمات</h3>
           <p>
-            اختر {info.group === 'region' ? 'المنطقة' : info.group === 'specialty' ? 'الاختصاص' : 'النوع'}
-            {' '}التي تريدها من الأعلى، وسنعرض لك خدماتها مباشرة.
+            اختر ما تريد من «{primary.label}» في الأعلى، وسنعرض لك خدماته مباشرة.
           </p>
         </div>
       ) : visibleItems.length === 0 ? (
         <div className="empty-state">
           <span className="empty-state__icon">🔍</span>
           <h3>لا توجد نتائج</h3>
-          <p>لا توجد خدمات مطابقة في «{selectedGroup.label}».</p>
+          <p>لا توجد خدمات مطابقة في «{selectedCard.label}».</p>
         </div>
       ) : (
         <>
           <div className="svc-result-head">
             <Icon name="pin" size={15} />
-            <span>
-              {info.group === 'region' ? `خدمات ${selectedGroup.label}` : selectedGroup.label}
-            </span>
+            <span>{selectedCard.label}</span>
             <strong>{visibleItems.length}</strong>
           </div>
 

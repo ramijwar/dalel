@@ -275,6 +275,117 @@ function migrate(PDO $pdo): void
     if (!isset($cfcols['hide_when_false'])) {
         $pdo->exec("ALTER TABLE category_fields ADD COLUMN hide_when_false INTEGER NOT NULL DEFAULT 0");
     }
+
+    // ════════════════════════════════════════════════════════════
+    //  الفلاتر — مكتبة فلاتر + إسنادها للأقسام
+    // ════════════════════════════════════════════════════════════
+    //
+    //  الفكرة: المدير يُنشئ فلتراً له **مصدر بيانات** (مناطق · اختصاص ·
+    //  حقل قائمة من قسم)، ثم يُسنده لقسم. الفلتر الأساسي (is_primary)
+    //  هو الذي يقود بطاقات العرض في المستوى الأول لصفحة القسم.
+    //
+    //  مثال: الصيدليات ← المناطق · الأطباء ← الاختصاص · السرفيس ← نوع المركبة
+    //
+    //  كانت هذه الخيارات مكتوبة في كود الواجهة (CAT_INFO) فلا يستطيع
+    //  المدير تغييرها. الآن صارت بيانات في القاعدة.
+    // ════════════════════════════════════════════════════════════
+    $pdo->exec("CREATE TABLE IF NOT EXISTS filters (
+        id         INTEGER PRIMARY KEY AUTOINCREMENT,
+        filter_key TEXT NOT NULL UNIQUE,
+        label      TEXT NOT NULL,
+        source_type TEXT NOT NULL DEFAULT 'region',
+        source_key TEXT NOT NULL DEFAULT '',
+        icon       TEXT NOT NULL DEFAULT '',
+        sort_order INTEGER NOT NULL DEFAULT 0,
+        is_active  INTEGER NOT NULL DEFAULT 1,
+        created_at TEXT
+    )");
+
+    $pdo->exec("CREATE TABLE IF NOT EXISTS category_filters (
+        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+        category_id INTEGER NOT NULL REFERENCES categories(id) ON DELETE CASCADE,
+        filter_id   INTEGER NOT NULL REFERENCES filters(id) ON DELETE CASCADE,
+        is_primary  INTEGER NOT NULL DEFAULT 0,
+        sort_order  INTEGER NOT NULL DEFAULT 0,
+        is_active   INTEGER NOT NULL DEFAULT 1,
+        created_at  TEXT,
+        UNIQUE(category_id, filter_id)
+    )");
+
+    $pdo->exec("CREATE INDEX IF NOT EXISTS idx_catfilter_cat ON category_filters(category_id)");
+    $pdo->exec("CREATE INDEX IF NOT EXISTS idx_catfilter_flt ON category_filters(filter_id)");
+
+    seed_filters($pdo);
+}
+
+/**
+ * بذرة الفلاتر — تعمل مرة واحدة فقط عند أول تشغيل بعد التحديث.
+ *
+ * لا تلمس شيئاً إن كان المدير قد أنشأ فلاتر بالفعل (غير مدمِّرة).
+ * تبني:
+ *   ١. فلترين عامّين: «المناطق» (من جدول regions) و«الاختصاص» (من specialties)
+ *   ٢. فلتراً لكل حقل قائمة مُعلَّم «قابل للفلترة» (نوع المركبة · اتجاه السفر…)
+ *   ٣. إسناداً افتراضياً لكل قسم: المناطق — مع استثناءات منطقية
+ *      (الأطباء ← الاختصاص · السرفيس ← نوع المركبة)
+ */
+function seed_filters(PDO $pdo): void
+{
+    try {
+        $existing = (int) $pdo->query("SELECT COUNT(*) FROM filters")->fetchColumn();
+        if ($existing > 0) {
+            return; // المدير يملك فلاتر — لا نُضيف
+        }
+
+        // app_now() من helpers.php — وقد لا تكون محمّلة في سكربتات الصيانة
+        $now = function_exists('app_now') ? app_now()->format('Y-m-d H:i:s') : date('Y-m-d H:i:s');
+        $ins = $pdo->prepare("INSERT INTO filters (filter_key, label, source_type, source_key, icon, sort_order, is_active, created_at)
+                              VALUES (?,?,?,?,?,?,1,?)");
+
+        // ─── ١) الفلاتران العامّان ───
+        $ins->execute(['region', 'المناطق', 'region', '', 'map-pin', 10, $now]);
+        $regionId = (int) $pdo->lastInsertId();
+
+        $ins->execute(['specialty', 'الاختصاص', 'specialty', '', 'stethoscope', 20, $now]);
+        $specialtyId = (int) $pdo->lastInsertId();
+
+        // ─── ٢) فلتر لكل حقل قائمة «قابل للفلترة» ───
+        // علم filterable كان يُحفظ بلا أثر — صار معناه: أنشئ له فلتراً.
+        $fieldFilters = [];   // field_key => filter_id
+        $order = 30;
+        $rows = $pdo->query("SELECT DISTINCT f.field_key, f.label, f.category_id
+                             FROM category_fields f
+                             WHERE f.type = 'select' AND f.filterable = 1 AND f.is_active = 1
+                             ORDER BY f.category_id, f.sort_order, f.id")->fetchAll();
+        // «specialty» و«region» لهما فلتر عامّ مدمج أصلاً — لا نُكرّرهما
+        $builtin = ['specialty' => true, 'region' => true, 'governorate' => true];
+        foreach ($rows as $r) {
+            $key = (string) $r['field_key'];
+            if (isset($fieldFilters[$key]) || isset($builtin[$key])) {
+                continue;
+            }
+            $ins->execute(['flt-' . $key, (string) $r['label'], 'field', $key, '', $order, $now]);
+            $fieldFilters[$key] = (int) $pdo->lastInsertId();
+            $order += 10;
+        }
+
+        // ─── ٣) الإسناد الافتراضي ───
+        // الفلتر الأساسي هو الذي يقود بطاقات المستوى الأول في صفحة القسم.
+        $bySlug = [
+            'doctors'   => $specialtyId,                       // الأطباء ← الاختصاص
+            'transport' => $fieldFilters['vehicle'] ?? null,   // السرفيس ← نوع المركبة
+        ];
+
+        $link = $pdo->prepare("INSERT OR IGNORE INTO category_filters (category_id, filter_id, is_primary, sort_order, is_active, created_at)
+                               VALUES (?,?,1,0,1,?)");
+        foreach ($pdo->query("SELECT id, slug FROM categories")->fetchAll() as $cat) {
+            $fid = $bySlug[$cat['slug']] ?? $regionId;
+            if ($fid) {
+                $link->execute([(int) $cat['id'], (int) $fid, $now]);
+            }
+        }
+    } catch (\Throwable $e) {
+        // فشل البذرة لا يمنع تشغيل الموقع — المدير يستطيع إنشاء الفلاتر يدوياً
+    }
 }
 
 /** تسجيل حدث في سجل النشاط */
