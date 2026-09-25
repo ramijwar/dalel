@@ -51,6 +51,18 @@ class DatabaseService {
     );
   }
 
+  /// يُغلق القاعدة المفتوحة ويُصفّر المرجع المؤجّل — للاختبارات فقط.
+  /// لولاه تتسرّب قاعدة اختبار إلى الاختبار التالي في الملف نفسه
+  /// (فتظهر أعطال متذبذبة تعتمد على ترتيب التشغيل).
+  static Future<void> resetForTests() async {
+    final inst = DatabaseService.instance;
+    try {
+      await inst._db?.close();
+    } catch (_) {}
+    inst._db = null;
+    testPath = null;
+  }
+
   /// مغلّف عام — للاختبارات (قاعدة بيانات في الذاكرة)
   Future<void> createSchema(Database d, [int v = _version]) => _create(d, v);
 

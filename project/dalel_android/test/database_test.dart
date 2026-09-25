@@ -1,4 +1,7 @@
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
+import 'package:path/path.dart' as p;
 import 'package:sqflite/sqflite.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
@@ -13,14 +16,37 @@ import 'package:dalel/services/database_service.dart';
  *    • الحقول المحلولة للخدمات (تعمل بدون إنترنت)
  * ══════════════════════════════════════════════════════════════ */
 
+/// `:memory:` في sqflite_common_ffi قاعدة **مشتركة** بين الاتصالات
+/// (file::memory:?cache=shared)، فكانت قواعد الاختبارات تتلوّث ببعضها
+/// وتظهر أعطال متذبذبة. نستخدم ملفاً مؤقتاً فريداً لكل قاعدة.
+int _dbSeq = 0;
+final List<String> _tmpFiles = [];
+
+String _tmpDbPath() {
+  _dbSeq++;
+  final path = p.join(Directory.systemTemp.path,
+      'dalel_test_${DateTime.now().microsecondsSinceEpoch}_$_dbSeq.sqlite');
+  _tmpFiles.add(path);
+  return path;
+}
+
 void main() {
   sqfliteFfiInit();
+
+  tearDownAll(() async {
+    await DatabaseService.resetForTests();
+    for (final f in _tmpFiles) {
+      try {
+        await File(f).delete();
+      } catch (_) {}
+    }
+  });
 
   late Database db;
 
   setUp(() async {
     db = await databaseFactoryFfi.openDatabase(
-      inMemoryDatabasePath,
+      _tmpDbPath(),
       options: OpenDatabaseOptions(
         version: 2,
         onCreate: (d, v) => DatabaseService.instance.createSchema(d),
@@ -53,8 +79,9 @@ void main() {
 
   test('ترقية من إصدار ١ تُنشئ جداول الحقول', () async {
     // أنشئ قاعدة بإصدار ١ (بلا جداول الحقول)
+    final path1 = _tmpDbPath();
     final old = await databaseFactoryFfi.openDatabase(
-      inMemoryDatabasePath,
+      path1,
       options: OpenDatabaseOptions(
         version: 1,
         onCreate: (d, v) async {
@@ -67,7 +94,7 @@ void main() {
     // أغلق وأعد الفتح بالإصدار ٢ لتشغيل الترقية
     await old.close();
     final upgraded = await databaseFactoryFfi.openDatabase(
-      inMemoryDatabasePath,
+      path1,
       options: OpenDatabaseOptions(
         version: 2,
         onCreate: (d, v) => DatabaseService.instance.createSchema(d),
@@ -77,7 +104,7 @@ void main() {
 
     // افتح من نفس المسار — نحتاج قاعدة جديدة للتحقق
     // (الذاكرة تُنشئ قاعدة جديدة، لذا نتحقق من _upgrade مباشرة)
-    final d2 = await databaseFactoryFfi.openDatabase(inMemoryDatabasePath);
+    final d2 = await databaseFactoryFfi.openDatabase(_tmpDbPath());
     await DatabaseService.instance.upgradeSchema(d2, 1, 2);
 
     final names = (await d2.query('sqlite_master', where: 'type = ?', whereArgs: ['table']))
@@ -95,7 +122,7 @@ void main() {
 
   test('ترقية من إصدار ٢ تضيف عمودَي الوحدة وإخفاء «لا»', () async {
     // قاعدة بإصدار ٢: جدول category_fields بالمخطط القديم (بلا العمودين)
-    final d = await databaseFactoryFfi.openDatabase(inMemoryDatabasePath);
+    final d = await databaseFactoryFfi.openDatabase(_tmpDbPath());
     await d.execute('''CREATE TABLE category_fields (
       id INTEGER PRIMARY KEY,
       category_id INTEGER NOT NULL,
@@ -266,8 +293,8 @@ void main() {
     // يُقص هو الآخر بـ limit=200 — فتظهر ٢٠٠ من أصل ٢٤٢.
     sqfliteFfiInit();
     databaseFactory = databaseFactoryFfi;
-    DatabaseService.testPath = inMemoryDatabasePath;
-    addTearDown(() => DatabaseService.testPath = null);
+    DatabaseService.testPath = _tmpDbPath();
+    addTearDown(DatabaseService.resetForTests);
     final svc = DatabaseService.instance;
     final d = await svc.db;
 

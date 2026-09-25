@@ -15,8 +15,38 @@ String? _sn(dynamic v) {
   return (s == null || s.isEmpty) ? null : s;
 }
 
-Map<String, dynamic> _m(dynamic v) =>
-    v is Map ? v.map((k, e) => MapEntry(k.toString(), e)) : <String, dynamic>{};
+/// خريطة من قيمة قد تصل خريطةً (من استجابة الـAPI) أو نصّاً مُشفَّراً
+/// (من القاعدة المحلية حيث تُخزَّن هذه الحقول بـjsonEncode).
+/// بغير ذلك يعود الحقل فارغاً بصمت عند العمل بلا إنترنت.
+Map<String, dynamic> _m(dynamic v) {
+  if (v is Map) return v.map((k, e) => MapEntry(k.toString(), e));
+  if (v is String && v.trim().isNotEmpty) {
+    try {
+      final d = jsonDecode(v);
+      return d is Map
+          ? d.map((k, e) => MapEntry(k.toString(), e))
+          : <String, dynamic>{};
+    } catch (_) {
+      return <String, dynamic>{};
+    }
+  }
+  return <String, dynamic>{};
+}
+
+/// قائمة من قيمة قد تصل قائمةً (من استجابة الـAPI) أو نصّاً مُشفَّراً
+/// (من القاعدة المحلية). كان cast المباشر يرمي عند القراءة من القاعدة.
+List<dynamic> _l(dynamic v) {
+  if (v is List) return v;
+  if (v is String && v.trim().isNotEmpty) {
+    try {
+      final d = jsonDecode(v);
+      return d is List ? d : const <dynamic>[];
+    } catch (_) {
+      return const <dynamic>[];
+    }
+  }
+  return const <dynamic>[];
+}
 
 // ═══════════════ القسم ═══════════════
 /* ══════════════════════════════════════════════════════════════
@@ -107,7 +137,7 @@ class CategoryField {
         sortOrder: _i(j['sort_order']),
         suffix: _s(j['suffix']),
         hideWhenFalse: _b(j['hide_when_false']),
-        options: (j['options'] as List? ?? [])
+        options: _l(j['options'])
             .whereType<Map<String, dynamic>>()
             .map(FieldOption.fromJson)
             .toList(),
@@ -267,11 +297,11 @@ class Category {
         sortOrder: _i(j['sort_order']),
         layout: _sn(j['layout']) ?? 'card',
         features: _m(j['features']),
-        fields: (j['fields'] as List? ?? [])
+        fields: _l(j['fields'])
             .whereType<Map<String, dynamic>>()
             .map(CategoryField.fromJson)
             .toList(),
-        filters: (j['filters'] as List? ?? [])
+        filters: _l(j['filters'])
             .whereType<Map<String, dynamic>>()
             .map(CategoryFilterLink.fromJson)
             .toList(),
@@ -600,7 +630,7 @@ class Service {
       whatsappNumber: _s(j['whatsapp_number']),
       note: _s(j['note']),
       photo: _sn(j['photo']),
-      fields: (j['fields'] as List? ?? [])
+      fields: _l(j['fields'])
           .whereType<Map<String, dynamic>>()
           .map(ResolvedField.fromJson)
           .toList(),
