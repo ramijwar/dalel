@@ -379,7 +379,12 @@ export function FieldsBuilder({ fields, onChange }: FieldsBuilderProps) {
               <select
                 className="inp inp--sm"
                 value={f.type}
-                onChange={(e) => patch(f._uid, { type: e.target.value as FieldType })}
+                onChange={(e) => {
+                  const type = e.target.value as FieldType
+                  // تحويل حقل إلى «نعم/لا» يُلغي فلترته — الفلترة للقوائم فقط،
+                  // ولو أبقيناها لبقي إعداد محفوظ بلا أثر في الواجهة.
+                  patch(f._uid, { type, ...(type !== 'select' ? { filterable: false } : {}) })
+                }}
               >
                 {FIELD_TYPES.map((t) => (
                   <option key={t.value} value={t.value}>
@@ -430,14 +435,17 @@ export function FieldsBuilder({ fields, onChange }: FieldsBuilderProps) {
               />
               <span>يظهر في البطاقة</span>
             </label>
-            <label className="chk chk--sm">
-              <input
-                type="checkbox"
-                checked={f.filterable}
-                onChange={(e) => patch(f._uid, { filterable: e.target.checked })}
-              />
-              <span>قابل للفلترة</span>
-            </label>
+            {/* الفلترة للقوائم فقط — الحقول المنطقية لا تُفلتر (انظر FieldFilters) */}
+            {f.type === 'select' && (
+              <label className="chk chk--sm" title="يُضيف شريط فلترة أعلى صفحة القسم">
+                <input
+                  type="checkbox"
+                  checked={f.filterable}
+                  onChange={(e) => patch(f._uid, { filterable: e.target.checked })}
+                />
+                <span>قابل للفلترة</span>
+              </label>
+            )}
 
             {/* للحقول المنطقية فقط: لا تُعرض القيمة إن كانت «لا» */}
             {f.type === 'boolean' && (

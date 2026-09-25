@@ -16,6 +16,10 @@ import Lucide from './Lucide'
  *
  *  التصفية تجري محلياً على العناصر المحمّلة (٣٠٠ كحد أقصى للقسم) فهي فورية
  *  بلا طلب شبكة إضافي، ولا تُفقد أي نتيجة لأن أكبر قسم فيه ٢٤٢ خدمة.
+ *
+ *  ملاحظة: الفلاتر المنطقية (نعم/لا) غير مدعومة عمداً — كانت تُنتج شريحة
+ *  «متوفر» لكل حقل نعم/لا (دوام ٢٤ ساعة · التوصيل · بنزين · مازوت) وهي
+ *  غير مفيدة للمستخدم. الحقول المنطقية تُعرض في البطاقة فقط.
  * ══════════════════════════════════════════════════════════════════
  */
 
@@ -33,10 +37,8 @@ interface Props {
 }
 
 export default function FieldFilters({ fields, value, onChange, matchCount, totalCount }: Props) {
-  // نعرض الحقول القابلة للفلترة فقط، وتلك التي لها خيارات أو منطقية
-  const usable = fields.filter(
-    (f) => f.filterable && (f.type === 'boolean' || (f.type === 'select' && f.options.length > 0)),
-  )
+  // فلاتر القوائم فقط — المنطقية ملغاة (انظر الملاحظة أعلاه)
+  const usable = fields.filter((f) => f.filterable && f.type === 'select' && f.options.length > 0)
   if (usable.length === 0) return null
 
   const activeCount = Object.values(value).filter((v) => v !== '').length
@@ -54,29 +56,17 @@ export default function FieldFilters({ fields, value, onChange, matchCount, tota
           </span>
 
           <div className="ffilters__opts">
-            {/* ─── حقل منطقي: خيار واحد «متوفر» ─── */}
-            {f.type === 'boolean' && (
+            {f.options.map((o) => (
               <button
-                className={`chip-btn ${value[f.key] === '1' ? 'is-active' : ''}`}
-                onClick={() => toggle(f.key, '1')}
+                key={o.id || o.value}
+                className={`chip-btn ${value[f.key] === o.value ? 'is-active' : ''}`}
+                onClick={() => toggle(f.key, o.value)}
+                title={o.label}
               >
-                متوفر
+                {o.icon ? <Lucide name={o.icon} size={13} /> : null}
+                {o.label}
               </button>
-            )}
-
-            {/* ─── قائمة: زر لكل خيار ─── */}
-            {f.type === 'select' &&
-              f.options.map((o) => (
-                <button
-                  key={o.id || o.value}
-                  className={`chip-btn ${value[f.key] === o.value ? 'is-active' : ''}`}
-                  onClick={() => toggle(f.key, o.value)}
-                  title={o.label}
-                >
-                  {o.icon ? <Lucide name={o.icon} size={13} /> : null}
-                  {o.label}
-                </button>
-              ))}
+            ))}
           </div>
         </div>
       ))}
@@ -105,25 +95,10 @@ export function matchesFieldFilters(s: Service, filters: FieldFilterState): bool
     if (!wanted) continue
 
     const resolved = (s.fields ?? []).find((f) => f.key === key)
-
-    // حقل منطقي: المطلوب «متوفر» — وغياب الحقل يعني «لا»
-    // (يُخفى الحقل عند «لا» في قسمٍ ما، فهذا هو التمثيل الصحيح)
-    if (wanted === '1') {
-      if (!resolved) return false
-      const v = String(resolved.value ?? '').toLowerCase()
-      if (!['1', 'true', 'نعم', 'yes'].includes(v)) {
-        // قد تكون قائمة اختيار بقيمة منطقية — نطابق العرض أيضاً
-        if (resolved.display !== 'نعم') return false
-      }
-      continue
-    }
-
     if (!resolved) return false
 
-    // مطابقة بقيمة الخيار أو نصه المعروض
+    // مطابقة بقيمة الخيار أو نصه المعروض — كلاهما محفوظ للقوائم
     if (String(resolved.value ?? '') !== wanted && resolved.display !== wanted) {
-      // البطاقات المختصرة قد تعرض «نعم/لا» للحقول المنطقية فقط،
-      // أما القوائم فالقيمة والنص فيها محفوظان — فلا حاجة لمزيد من الاحتمالات.
       return false
     }
   }

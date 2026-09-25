@@ -67,8 +67,8 @@ $SPEC = [
         'drop' => ['price'],
         'fields' => [
             ['key' => 'pharmacist', 'label' => 'الصيدلاني', 'type' => 'text',    'show_in_card' => 1, 'placeholder' => 'اسم الصيدلاني المسؤول'],
-            ['key' => 'is_24h',     'label' => 'دوام 24 ساعة', 'type' => 'boolean', 'show_in_card' => 1, 'filterable' => 1, 'hide_when_false' => 1],
-            ['key' => 'delivery',   'label' => 'خدمة التوصيل',  'type' => 'boolean', 'show_in_card' => 1, 'filterable' => 1, 'hide_when_false' => 1],
+            ['key' => 'is_24h',     'label' => 'دوام 24 ساعة', 'type' => 'boolean', 'show_in_card' => 1, 'hide_when_false' => 1],
+            ['key' => 'delivery',   'label' => 'خدمة التوصيل',  'type' => 'boolean', 'show_in_card' => 1, 'hide_when_false' => 1],
         ],
     ],
 
@@ -91,8 +91,8 @@ $SPEC = [
         'drop' => [],
         'fields' => [
             ['key' => 'company',    'label' => 'الشركة',     'type' => 'text',    'show_in_card' => 1, 'placeholder' => 'كازية الجلاء'],
-            ['key' => 'benzen',     'label' => 'بنزين',      'type' => 'boolean', 'show_in_card' => 1, 'filterable' => 1],
-            ['key' => 'diesel',     'label' => 'مازوت',      'type' => 'boolean', 'show_in_card' => 1, 'filterable' => 1],
+            ['key' => 'benzen',     'label' => 'بنزين',      'type' => 'boolean', 'show_in_card' => 1],
+            ['key' => 'diesel',     'label' => 'مازوت',      'type' => 'boolean', 'show_in_card' => 1],
             ['key' => 'smart_card', 'label' => 'بطاقة ذكية', 'type' => 'boolean', 'show_in_card' => 0, 'hide_when_false' => 1],
         ],
     ],
@@ -104,7 +104,7 @@ $SPEC = [
         'rename' => ['f0d00cfdb' => 'direction'],
         'fields' => [
             ['key' => 'direction', 'label' => 'اتجاه السفر',  'type' => 'select', 'show_in_card' => 1, 'filterable' => 1, 'required' => 1, 'keep_options' => true],
-            ['key' => 'vehicle',   'label' => 'نوع المركبة',  'type' => 'select', 'show_in_card' => 1, 'filterable' => 1, 'keep_options' => true,
+            ['key' => 'vehicle',   'label' => 'نوع المركبة',  'type' => 'select', 'show_in_card' => 1, 'filterable' => 1,
              'options' => [
                 ['label' => 'سرفيس', 'value' => 'سرفيس', 'icon' => '🚐'],
                 ['label' => 'باص',   'value' => 'باص',   'icon' => '🚌'],
