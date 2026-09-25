@@ -366,6 +366,33 @@ jobs:
           tail -n 3 /tmp/build.log
 
       # ─── التجهيز والنشر ───
+      # ─── التحقق من رابط الخادم المخبوز في الحزمة ───
+      # `--dart-define` يُخبز الرابط داخل libapp.so، فنتأكد قبل التسليم أن
+      # الحزمة تخاطب الخادم المقصود فعلاً (وإلا لبُنيت نسخة تخاطب غيره بلا أن
+      # يظهر ذلك في أي مكان). تنبيه لا فشل: الأهم ألّا تخرج حزمة صامتة.
+      - name: التحقق من رابط الخادم داخل الحزمة
+        if: ${{ steps.apk.outcome == 'success' }}
+        working-directory: ${{ env.APP_DIR }}
+        run: |
+          set +e
+          APK="${{ steps.ver.outputs.apk }}"
+          WANT="${{ steps.ver.outputs.url }}"
+          TMP=$(mktemp -d)
+          unzip -qq -o "$APK" 'lib/*/libapp.so' -d "$TMP" 2>/dev/null
+          SO=$(ls "$TMP"/lib/*/libapp.so 2>/dev/null | head -n 1)
+          if [ -z "$SO" ]; then
+            echo "::warning title=تعذّر التحقق::لم يُستخرج libapp.so من $APK"
+            exit 0
+          fi
+          FOUND=$(grep -ao 't3lam\.site/dalel[a-z]*' "$SO" 2>/dev/null | sort -u | paste -sd ', ' -)
+          echo "الرابط المتوقّع: $WANT"
+          echo "الرابط الموجود في libapp.so: ${FOUND:-لم يُعثر على أي رابط}"
+          if grep -aqF "$WANT" "$SO"; then
+            echo "✅ الحزمة تخاطب الخادم المقصود: $WANT"
+          else
+            echo "::warning title=رابط الخادم غير مطابق::المتوقّع '$WANT' — والموجود في الحزمة: '${FOUND:-لا شيء}'"
+          fi
+
       - name: تجهيز الملفات والبصمة
         id: pack
         working-directory: ${{ env.APP_DIR }}
