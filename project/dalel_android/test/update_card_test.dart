@@ -68,6 +68,13 @@ Widget _host(UpdateService s) => MaterialApp(
 /// ارتفاع الشريط الفعلي — مقياس «كبيرة جداً» مقابل «شريط».
 double _h(WidgetTester t) => t.getSize(find.byType(UpdateCard)).height;
 
+/// زرٌّ بنصّه — `find.byType(FilledButton)` لا يكفي: `FilledButton.icon`
+/// يُنشئ صنفاً فرعياً (`_FilledButtonWithIcon`)، والمطابقة بالنوع دقيقة.
+Finder _button(String label) => find.ancestor(
+      of: find.text(label),
+      matching: find.byWidgetPredicate((w) => w is FilledButton),
+    );
+
 void main() {
   group('شكل الشريط', () {
     testWidgets('متاح: قصير، وزر «تنزيل» ظاهر فيه', (tester) async {
@@ -79,7 +86,7 @@ void main() {
 
       expect(find.text('يتوفر إصدار جديد 1.3.0'), findsOneWidget);
       // الإجراء الأساسي موجود — هذه بالضبط الشكوى التي أُصلحت
-      expect(find.widgetWithText(FilledButton, 'تنزيل'), findsOneWidget,
+      expect(_button('تنزيل'), findsOneWidget,
           reason: 'زر التنزيل يجب أن يكون ظاهراً في الشريط نفسه');
       // ومعه تفاصيل الإصدار في سطر ثانٍ
       expect(find.textContaining('12.0 ميغا'), findsOneWidget);
@@ -98,7 +105,7 @@ void main() {
       final w = tester.getSize(find.byType(UpdateCard)).width;
       expect(w, lessThanOrEqualTo(360.0));
       // زر التنزيل وترويسة الشريط على السطر نفسه (فرق المراكز أقل من ارتفاع سطر)
-      final btn = tester.getCenter(find.widgetWithText(FilledButton, 'تنزيل'));
+      final btn = tester.getCenter(_button('تنزيل'));
       final title = tester.getCenter(find.text('يتوفر إصدار جديد 1.3.0'));
       expect((btn.dy - title.dy).abs(), lessThan(24),
           reason: 'الزر والعنوان في صفٍّ واحد — لا زر تحت المحتوى');
@@ -130,7 +137,7 @@ void main() {
       await tester.pump();
 
       expect(find.text('يُنزَّل التحديث 42%'), findsOneWidget);
-      expect(find.widgetWithText(FilledButton, 'إلغاء'), findsOneWidget);
+      expect(_button('إلغاء'), findsOneWidget);
       expect(find.byType(LinearProgressIndicator), findsOneWidget);
       expect(find.textContaining('م.ب/ث'), findsOneWidget);
       // يبقى شريطاً رفيعاً أثناء التنزيل أيضاً
@@ -151,7 +158,7 @@ void main() {
       await tester.pump();
 
       expect(find.text('التحديث جاهز للتثبيت'), findsOneWidget);
-      expect(find.widgetWithText(FilledButton, 'تثبيت'), findsOneWidget);
+      expect(_button('تثبيت'), findsOneWidget);
       expect(_h(tester), lessThanOrEqualTo(72));
     });
 
@@ -168,7 +175,7 @@ void main() {
 
       expect(find.text('تعذّر التحديث'), findsOneWidget);
       expect(find.textContaining('تعذّر التنزيل (رمز 404)'), findsOneWidget);
-      expect(find.widgetWithText(FilledButton, 'إعادة'), findsOneWidget);
+      expect(_button('إعادة'), findsOneWidget);
     });
   });
 
@@ -180,7 +187,7 @@ void main() {
       await tester.pumpWidget(_host(s));
       await tester.pump();
 
-      await tester.tap(find.widgetWithText(FilledButton, 'تنزيل'));
+      await tester.tap(_button('تنزيل'));
       // تنتقل الحالة فوراً إلى «يُنزَّل» — دليل أن الزر ليس صامتاً
       await tester.pump();
       expect(s.phase, UpdatePhase.downloading);
@@ -188,7 +195,7 @@ void main() {
       // ثم تفشل محاولة الشبكة في بيئة الاختبار (لا تخزين مؤقّت/لا شبكة)
       await tester.pumpAndSettle(const Duration(milliseconds: 50));
       expect(s.phase, UpdatePhase.failed);
-      expect(find.widgetWithText(FilledButton, 'إعادة'), findsOneWidget,
+      expect(_button('إعادة'), findsOneWidget,
           reason: 'بعد الفشل يعرض الشريط «إعادة» بدل أن يبقى بلا إجراء');
     });
 
@@ -216,7 +223,7 @@ void main() {
       expect(find.byTooltip('لاحقاً'), findsNothing,
           reason: 'التحديث الإلزامي لا يُخفى بزر');
       // ومع ذلك زر التنزيل حاضر
-      expect(find.widgetWithText(FilledButton, 'تنزيل'), findsOneWidget);
+      expect(_button('تنزيل'), findsOneWidget);
     });
   });
 
@@ -256,7 +263,7 @@ void main() {
       expect(find.text('ما الجديد'), findsOneWidget);
       expect(find.textContaining('إصلاح التنزيل'), findsOneWidget);
       expect(find.textContaining('تحسين الشكل'), findsOneWidget);
-      expect(find.widgetWithText(FilledButton, 'تثبيت التحديث'), findsOneWidget);
+      expect(_button('تثبيت التحديث'), findsOneWidget);
     });
   });
 }
