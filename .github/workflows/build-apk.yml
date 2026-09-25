@@ -159,6 +159,19 @@ jobs:
               echo "::error title=سبب الاستثناء::$(echo "$l" | tr '\n' ' ' | cut -c1-400)"
             done
 
+            # ─── تشخيص مركّز ───
+            # اسم الاختبار الفاشل (عدّاد الفشل -N) + الودجة المتسبّبة + سطرها في
+            # المصدر — كي لا تضيع تفاصيل التخطيط في ذيل السجل.
+            {
+              echo "::group::الاختبارات التي سقطت"
+              grep -nE '^[0-9]{2}:[0-9]{2} \+[0-9]+ -[0-9]+' /tmp/test.log | cut -c1-300
+              echo "::endgroup::"
+            }
+            grep -nE '\[E\]|RenderFlex overflowed|error-causing widget|file:///[^ ]+\.dart:[0-9]+:[0-9]+|A RenderFlex|overflowed by' /tmp/test.log \
+              | tail -n 40 | while IFS= read -r l; do
+              echo "::error title=تشخيص::$(echo "$l" | tr '\n' ' ' | cut -c1-400)"
+            done
+
             # لكل اختبار فاشل: سطر واحد مضغوط يحمل السبب كاملاً (يظهر في واجهة Actions)
             awk '
               BEGIN { buf=""; infail=0 }
