@@ -435,17 +435,10 @@ export function FieldsBuilder({ fields, onChange }: FieldsBuilderProps) {
               />
               <span>يظهر في البطاقة</span>
             </label>
-            {/* الفلترة للقوائم فقط — الحقول المنطقية لا تُفلتر (انظر FieldFilters) */}
-            {f.type === 'select' && (
-              <label className="chk chk--sm" title="يُضيف شريط فلترة أعلى صفحة القسم">
-                <input
-                  type="checkbox"
-                  checked={f.filterable}
-                  onChange={(e) => patch(f._uid, { filterable: e.target.checked })}
-                />
-                <span>قابل للفلترة</span>
-              </label>
-            )}
+            {/* أُزيل مفتاح «قابل للفلترة»: كان يُضيف شريط فلترة أعلى صفحة
+                القسم، وقد أُزيل الشريط لأنه يكرّر بنية القسم نفسها
+                (الأطباء بالاختصاص · السرفيس بنوع المركبة). يبقى العمود في
+                قاعدة البيانات ولا أثر له على الواجهة. */}
 
             {/* للحقول المنطقية فقط: لا تُعرض القيمة إن كانت «لا» */}
             {f.type === 'boolean' && (

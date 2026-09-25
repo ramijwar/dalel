@@ -3298,56 +3298,6 @@ dialog.modal.modal--wide {
 }
 
 /* ══════════════════════════════════════════════════════════════
-   فلاتر الحقول الديناميكية — تُبنى من تعريفات القسم نفسها
-   (اختصاص الطبيب · بنزين/مازوت · نوع المركبة · اتجاه السفر)
-   ══════════════════════════════════════════════════════════════ */
-.ffilters {
-  display: flex; flex-direction: column; gap: 8px;
-  padding: 10px 12px;
-  margin-bottom: 12px;
-  background: var(--bg2);
-  border: 1px solid var(--border-light);
-  border-radius: var(--radius);
-}
-.ffilters__row {
-  display: flex; align-items: flex-start; gap: 10px; flex-wrap: wrap;
-}
-.ffilters__label {
-  display: inline-flex; align-items: center; gap: 5px;
-  flex: none; min-width: 76px; padding-top: 7px;
-  font-size: 0.76rem; font-weight: 700; color: var(--text2);
-}
-.ffilters__opts {
-  display: flex; flex-wrap: wrap; gap: 6px;
-  flex: 1 1 240px; min-width: 0;
-}
-.ffilters__opts .chip-btn {
-  display: inline-flex; align-items: center; gap: 5px;
-}
-.ffilters__opts .lc,
-.ffilters__opts .lc--text { flex: none; }
-.ffilters__foot {
-  display: flex; align-items: center; justify-content: space-between;
-  gap: 10px; flex-wrap: wrap;
-  padding-top: 8px; border-top: 1px dashed var(--border-light);
-  font-size: 0.76rem; color: var(--text2);
-}
-.ffilters__foot strong { color: var(--accent); }
-.ffilters__clear {
-  display: inline-flex; align-items: center; gap: 4px;
-  padding: 5px 10px; border: 1px solid var(--border);
-  border-radius: 16px; background: var(--bg); color: var(--text2);
-  font-size: 0.74rem; font-weight: 600; cursor: pointer; font-family: var(--font);
-  transition: var(--transition);
-}
-.ffilters__clear:hover { color: var(--red); border-color: var(--red); }
-
-@media (max-width: 640px) {
-  .ffilters__label { min-width: 0; padding-top: 0; }
-  .ffilters__row { flex-direction: column; gap: 6px; }
-}
-
-/* ══════════════════════════════════════════════════════════════
    تبويب الطلبات — رابط الخدمة المنشأة + أزرار الإجراءات
    ══════════════════════════════════════════════════════════════ */
 

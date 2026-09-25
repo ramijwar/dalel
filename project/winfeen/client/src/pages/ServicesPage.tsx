@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import FieldFilters, { matchesFieldFilters, type FieldFilterState } from '../components/FieldFilters'
 import { Link, useParams } from 'react-router-dom'
 import { useStore } from '../lib/store'
 import { api } from '../lib/api'
@@ -126,8 +125,6 @@ export default function ServicesPage() {
   const [specialtyId, setSpecialtyId] = useState<number | null>(null)
   const [groupKey, setGroupKey] = useState<string | null>(null)
   const [q, setQ] = useState('')
-  /** فلاتر الحقول الديناميكية — مفتاح الحقل ← القيمة المختارة */
-  const [fieldFilters, setFieldFilters] = useState<FieldFilterState>({})
   const [layout, setLayout] = useState<'card' | 'list'>('card')
   /** الخدمة المختارة التي تُعرض بياناتها في اللوحة السفلية */
   const [picked, setPicked] = useState<Service | null>(null)
@@ -192,7 +189,6 @@ export default function ServicesPage() {
   // إعادة تعيين التحديد وطريقة العرض عند تغيير القسم
   useEffect(() => {
     setGroupKey(null); setRegionId(null); setSpecialtyId(null); setPicked(null)
-    setFieldFilters({})
     setLayout(info.defaultLayout ?? 'card')
   }, [slug, info.defaultLayout])
 
@@ -271,19 +267,18 @@ export default function ServicesPage() {
     [groups, activeKey],
   )
 
-  /** العناصر بعد فلاتر الحقول الديناميكية (قبل تجميع المناطق) */
-  const fieldFiltered = useMemo(
-    () => (Object.values(fieldFilters).some(Boolean)
-      ? items.filter((s) => matchesFieldFilters(s, fieldFilters))
-      : items),
-    [items, fieldFilters],
-  )
-
-  /** العناصر الظاهرة — تُصفَّى محلياً في وضع meta */
+  /**
+   * العناصر الظاهرة — تُصفَّى محلياً في وضع meta (تجميع «نوع المركبة»).
+   *
+   * ملاحظة: كان هنا شريط «فلاتر الحقول الديناميكية» أعلى الصفحة، أُزيل
+   * بأمر المستخدم لأنه يكرّر بنية القسم نفسها — قسم الأطباء يُجمّع أصلاً
+   * بالاختصاص، وقسم السرفيس يُجمّع أصلاً بنوع المركبة، فبطاقات التجميع
+   * (المستوى الأول: بطاقات التجميع) هي الفلتر الأساسي وتكفي.
+   */
   const visibleItems = useMemo(() => {
-    if (info.group !== 'meta' || !groupKey) return fieldFiltered
-    return fieldFiltered.filter((s) => metaGroup(s, info.metaKey ?? '').key === groupKey)
-  }, [fieldFiltered, groupKey, info.group, info.metaKey])
+    if (info.group !== 'meta' || !groupKey) return items
+    return items.filter((s) => metaGroup(s, info.metaKey ?? '').key === groupKey)
+  }, [items, groupKey, info.group, info.metaKey])
 
   const selectGroup = (key: string | null) => {
     setPicked(null)
@@ -358,15 +353,6 @@ export default function ServicesPage() {
           </button>
         ))}
       </div>
-
-      {/* ── فلاتر الحقول الديناميكية (بنزين، مازوت، اختصاص…) ── */}
-      <FieldFilters
-        fields={cat?.fields ?? []}
-        value={fieldFilters}
-        onChange={setFieldFilters}
-        matchCount={fieldFiltered.length}
-        totalCount={items.length}
-      />
 
       {/* ── شريط العدد والبحث وطريقة العرض ── */}
       <div className="svc-bar">
