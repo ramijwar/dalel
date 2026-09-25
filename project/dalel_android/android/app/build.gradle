@@ -5,6 +5,19 @@ plugins {
     id "dev.flutter.flutter-gradle-plugin"
 }
 
+// ─── توقيع الإصدار ───────────────────────────────────────────────
+// android/key.properties (لا يُرفع إلى Git — يُنشأ من أسرار GitHub Actions):
+//   storeFile=../dalel-release.jks
+//   storePassword=…
+//   keyAlias=dalel
+//   keyPassword=…
+def keystorePropsFile = rootProject.file("key.properties")
+def keystoreProps = new Properties()
+def hasReleaseKey = keystorePropsFile.exists()
+if (hasReleaseKey) {
+    keystorePropsFile.withInputStream { keystoreProps.load(it) }
+}
+
 android {
     namespace = "com.winfeen.dalel"
     compileSdk = flutter.compileSdkVersion
@@ -30,11 +43,27 @@ android {
         versionName = flutter.versionName
     }
 
+    // تُعرَّف تهيئة الإصدار فقط عند وجود المفتاح — لا تهيئة فارغة
+    if (hasReleaseKey) {
+        signingConfigs {
+            release {
+                keyAlias = keystoreProps['keyAlias']
+                keyPassword = keystoreProps['keyPassword']
+                storeFile = file(keystoreProps['storeFile'])
+                storePassword = keystoreProps['storePassword']
+            }
+        }
+    }
+
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.debug
+            // مفتاح إصدار حقيقي إن وُجد (android/key.properties + ملف .jks)،
+            // وإلا مفاتيح التصحيح — كي يعمل `flutter build apk` مباشرةً.
+            //
+            // ⚠️ تثبيت تحديث فوق نسخة قديمة يتطلّب **نفس مفتاح التوقيع دائماً**؛
+            //    فإن بنيت نسخة بمفاتيح التصحيح ثم نسخة بمفتاح إصدار، لن يقبل
+            //    أندرويد التحديث وسيطلب إزالة التطبيق أولاً.
+            signingConfig = hasReleaseKey ? signingConfigs.release : signingConfigs.debug
         }
     }
 }

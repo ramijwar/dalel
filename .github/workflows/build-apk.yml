@@ -1,0 +1,314 @@
+name: بناء APK
+
+# ═══════════════════════════════════════════════════════════════
+#  بناء حزمة أندرويد (APK) جاهزة للنشر — على خوادم GitHub مجاناً
+#
+#  كيف تشغّله؟
+#    GitHub → تبويب «Actions» → «بناء APK» → زر «Run workflow»
+#    اترك الحقول فارغة ليُبنى الإصدار الموجود في pubspec.yaml،
+#    أو اكتب اسم الإصدار ورقم البناء لبناء إصدار جديد فوراً.
+#
+#  الناتج:
+#    • ملف APK جاهز للتنزيل من صفحة التشغيل (Artifacts)
+#    • ملف build-info.txt فيه الاسم والحجم وبصمة SHA-256
+#    • رابط تحميل عام دائم إن اخترتَ «إنشاء إصدار GitHub»
+#
+#  المدة: أول تشغيل ~٦–٩ دقائق (تنزيل Flutter)، وبعدها ~٢–٤ دقائق
+#  بفضل التخزين المؤقت لـ Flutter وGradle وPub.
+# ═══════════════════════════════════════════════════════════════
+
+on:
+  workflow_dispatch:
+    inputs:
+      version_name:
+        description: 'اسم الإصدار — مثال: 1.2.0   (فارغ = من pubspec.yaml)'
+        required: false
+        default: ''
+      version_code:
+        description: 'رقم البناء — يجب أن يزيد في كل إصدار، مثال: 3   (فارغ = من pubspec.yaml)'
+        required: false
+        default: ''
+      server_url:
+        description: 'عنوان الخادم الذي يخاطبه التطبيق'
+        required: false
+        default: 'https://t3lam.site/dalel'
+      build_type:
+        description: 'نوع البناء'
+        required: true
+        default: release
+        type: choice
+        options:
+          - release
+          - debug
+      publish_release:
+        description: 'إنشاء «إصدار GitHub» مع الملف (يعطي رابط تحميل عام دائم)'
+        required: false
+        type: boolean
+        default: false
+      release_tag:
+        description: 'اسم الوسم للإصدار — مثال: v1.2.0 (مع الخيار أعلاه)'
+        required: false
+        default: ''
+      flutter_version:
+        description: 'إصدار Flutter (فارغ = الافتراضي المضبوط)' 
+        required: false
+        default: ''
+
+  # بناء تلقائي عند تغيير كود التطبيق على الفرع الرئيسي
+  push:
+    branches: [main, 'arena/**']
+    paths:
+      - 'project/dalel_android/**'
+      - '.github/workflows/build-apk.yml'
+
+permissions:
+  contents: write
+
+# تشغيل واحد لكل فرع — يُلغي التشغيل السابق الجاري
+concurrency:
+  group: apk-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  FLUTTER_VERSION: ${{ inputs.flutter_version || '3.27.4' }}
+  APP_DIR: project/dalel_android
+
+jobs:
+  # ═══════════════════════════════════════════════════════════
+  #  الفحص — يعمل بالتوازي ولا يمنع البناء (تقرير فقط)
+  # ═══════════════════════════════════════════════════════════
+  verify:
+    name: الفحص والاختبارات
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - name: تنزيل الحزم
+        working-directory: ${{ env.APP_DIR }}
+        run: flutter pub get
+
+      - name: تحليل الكود
+        working-directory: ${{ env.APP_DIR }}
+        run: flutter analyze --no-pub --no-fatal-infos --no-fatal-warnings
+
+      - name: الاختبارات
+        working-directory: ${{ env.APP_DIR }}
+        run: flutter test --no-pub --reporter expanded
+
+  # ═══════════════════════════════════════════════════════════
+  #  البناء — يُنتج ملف APK
+  # ═══════════════════════════════════════════════════════════
+  build:
+    name: بناء الحزمة
+    runs-on: ubuntu-latest
+    env:
+      # تُقرأ على مستوى المهنة كي تستطيع شرطُ الخطوة رؤيتها
+      # (سياق secrets لا يُتاح داخل if مباشرةً)
+      KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+      KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+      KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+      KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: إعداد Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      # تخزين مؤقت لـ Gradle (يشمل توزيعة Gradle والاعتماديات)
+      - name: تخزين Gradle مؤقتاً
+        uses: gradle/actions/setup-gradle@v4
+
+      # تخزين مؤقت لـ Flutter SDK (الأكبر — يُوفّر دقائق)
+      - name: إعداد Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - name: تخزين حزم Dart مؤقتاً
+        uses: actions/cache@v4
+        with:
+          path: ~/.pub-cache
+          key: pub-${{ runner.os }}-${{ hashFiles('project/dalel_android/pubspec.lock') }}
+          restore-keys: pub-${{ runner.os }}-
+
+      - name: معلومات البيئة
+        run: |
+          echo "Flutter: $(flutter --version | head -1)"
+          java -version 2>&1 | head -1
+
+      - name: تنزيل الحزم
+        working-directory: ${{ env.APP_DIR }}
+        run: flutter pub get
+
+      # ─── تحديد رقم الإصدار ───
+      - name: تحديد الإصدار
+        id: ver
+        working-directory: ${{ env.APP_DIR }}
+        env:
+          IN_NAME: ${{ inputs.version_name }}
+          IN_CODE: ${{ inputs.version_code }}
+          IN_TYPE: ${{ inputs.build_type }}
+          IN_URL: ${{ inputs.server_url }}
+        run: |
+          set -e
+          DEF=$(grep -m1 '^version:' pubspec.yaml | sed 's/^version:[[:space:]]*//')
+          DEF_NAME="${DEF%%+*}"
+          DEF_CODE="${DEF##*+}"
+          [ "$DEF_CODE" = "$DEF_NAME" ] && DEF_CODE=1
+
+          NAME="${IN_NAME:-$DEF_NAME}"
+          CODE="${IN_CODE:-$DEF_CODE}"
+          TYPE="${IN_TYPE:-release}"
+          URL="${IN_URL:-https://t3lam.site/dalel}"
+
+          # تحقق مبكّر برسالة واضحة بدل فشل غامض في Gradle
+          case "$CODE" in
+            ''|*[!0-9]*) echo "::error::رقم البناء يجب أن يكون رقماً صحيحاً (وصل: '$CODE')"; exit 1 ;;
+          esac
+          case "$NAME" in
+            [0-9]*.[0-9]*) ;;
+            *) echo "::error::اسم الإصدار يجب أن يبدأ بأرقام مثل 1.2.0 (وصل: '$NAME')"; exit 1 ;;
+          esac
+          case "$URL" in
+            https://*|http://*) ;;
+            *) echo "::error::عنوان الخادم يجب أن يبدأ بـ https:// (وصل: '$URL')"; exit 1 ;;
+          esac
+
+          {
+            echo "name=$NAME"
+            echo "code=$CODE"
+            echo "type=$TYPE"
+            echo "url=$URL"
+            echo "apk=dalel-$NAME-$CODE.apk"
+          } >> "$GITHUB_OUTPUT"
+
+          echo "الإصدار: $NAME ($CODE) · النوع: $TYPE · الخادم: $URL"
+
+      # ─── توقيع الإصدار من الأسرار (إن وُجدت) ───
+      - name: تجهيز مفتاح التوقيع (اختياري)
+        if: ${{ env.KEYSTORE_BASE64 != '' }}
+        working-directory: ${{ env.APP_DIR }}/android
+        run: |
+          echo "$KEYSTORE_BASE64" | base64 -d > dalel-release.jks
+          cat > key.properties <<EOF
+          storeFile=../dalel-release.jks
+          storePassword=$KEYSTORE_PASSWORD
+          keyAlias=${KEY_ALIAS:-dalel}
+          keyPassword=${KEY_PASSWORD:-$KEYSTORE_PASSWORD}
+          EOF
+          echo "✅ سيُوقَّع الإصدار بمفتاح حقيقي"
+
+      - name: تنبيه إن لم يوجد مفتاح توقيع
+        if: ${{ env.KEYSTORE_BASE64 == '' }}
+        run: |
+          echo "::warning title=توقيع التصحيح::لا يوجد مفتاح إصدار — سيُوقَّع الملف بمفاتيح التصحيح. التحديثات التلقائية تحتاج نفس مفتاح التوقيع دائماً؛ أضف KEYSTORE_BASE64 في أسرار المستودع قبل التوزيع الجدّي."
+
+      - name: بناء الحزمة
+        working-directory: ${{ env.APP_DIR }}
+        run: |
+          flutter build apk --${{ steps.ver.outputs.type }} \
+            --build-name="${{ steps.ver.outputs.name }}" \
+            --build-number="${{ steps.ver.outputs.code }}" \
+            --dart-define=DALEL_BASE_URL="${{ steps.ver.outputs.url }}"
+
+      # ─── التجهيز والنشر ───
+      - name: تجهيز الملفات والبصمة
+        id: pack
+        working-directory: ${{ env.APP_DIR }}
+        run: |
+          set -e
+          SRC="build/app/outputs/flutter-apk/app-${{ steps.ver.outputs.type }}.apk"
+          [ -f "$SRC" ] || { echo "::error::لم يُنتج ملف APK في $SRC"; exit 1; }
+
+          OUT="${{ steps.ver.outputs.apk }}"
+          cp "$SRC" "$OUT"
+          SIZE=$(stat -c%s "$OUT")
+          SHA=$(sha256sum "$OUT" | cut -d' ' -f1)
+
+          {
+            echo "size=$SIZE"
+            echo "sha=$SHA"
+            echo "size_h=$(awk -v s=$SIZE 'BEGIN{printf "%.1f", s/1048576}')"
+          } >> "$GITHUB_OUTPUT"
+
+          {
+            echo "الملف: $OUT"
+            echo "الإصدار: ${{ steps.ver.outputs.name }} (بناء ${{ steps.ver.outputs.code }})"
+            echo "النوع: ${{ steps.ver.outputs.type }}"
+            echo "الخادم: ${{ steps.ver.outputs.url }}"
+            echo "الحجم: $SIZE بايت"
+            echo "SHA-256: $SHA"
+            echo "الالتزام: ${{ github.sha }}"
+          } > build-info.txt
+          cat build-info.txt
+
+      - name: ملخّص التشغيل
+        working-directory: ${{ env.APP_DIR }}
+        run: |
+          {
+            echo "## ✅ حزمة أندرويد جاهزة — ${{ steps.ver.outputs.name }} (بناء ${{ steps.ver.outputs.code }})"
+            echo ""
+            echo "| | |"
+            echo "|---|---|"
+            echo "| الملف | \`${{ steps.ver.outputs.apk }}\` |"
+            echo "| الحجم | ${{ steps.pack.outputs.size_h }} ميغا |"
+            echo "| الخادم | \`${{ steps.ver.outputs.url }}\` |"
+            echo "| النوع | ${{ steps.ver.outputs.type }} |"
+            echo "| SHA-256 | \`${{ steps.pack.outputs.sha }}\` |"
+            echo ""
+            echo "### نشره للتحديث من داخل التطبيق"
+            echo ""
+            echo "1. نزّل الملف من قسم **Artifacts** في هذه الصفحة."
+            echo "2. ارفعه إلى موقعك (مجلد \`apk/\`) أو استعمل رابط الإصدار إن فعّلت «إنشاء إصدار GitHub»."
+            echo "3. لوحة التحكم › **تحديث التطبيق**:"
+            echo "   - الإصدار: \`${{ steps.ver.outputs.name }}\`"
+            echo "   - رقم البناء: \`${{ steps.ver.outputs.code }}\`"
+            echo "   - مسار الملف: \`apk/${{ steps.ver.outputs.apk }}\`"
+            echo "4. احفظ — وسيظهر التنبيه لكل مستخدم نسخته أقدم."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: رفع الملف (Artifacts)
+        uses: actions/upload-artifact@v4
+        with:
+          name: dalel-apk-${{ steps.ver.outputs.name }}-${{ steps.ver.outputs.code }}
+          path: |
+            ${{ env.APP_DIR }}/${{ steps.ver.outputs.apk }}
+            ${{ env.APP_DIR }}/build-info.txt
+          if-no-files-found: error
+          retention-days: 90
+
+      # ─── إصدار GitHub (رابط تحميل عام دائم) ───
+      - name: إنشاء إصدار GitHub
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.publish_release }}
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.release_tag || format('v{0}-{1}', steps.ver.outputs.name, steps.ver.outputs.code) }}
+          name: ${{ format('دليل الدير {0} (بناء {1})', steps.ver.outputs.name, steps.ver.outputs.code) }}
+          body: |
+            حزمة أندرويد جاهزة للتنزيل المباشر.
+
+            - الإصدار: ${{ steps.ver.outputs.name }} (بناء ${{ steps.ver.outputs.code }})
+            - الحجم: ${{ steps.pack.outputs.size_h }} ميغا
+            - SHA-256: `${{ steps.pack.outputs.sha }}`
+
+            للاستعمال في «تحديث التطبيق»: انسخ رابط الملف أدناه والصقه في حقل
+            «رابط تحميل خارجي».
+          files: ${{ env.APP_DIR }}/${{ steps.ver.outputs.apk }}
+          generate_release_notes: true
+
+      - name: تنظيف ملف التوقيع
+        if: always()
+        working-directory: ${{ env.APP_DIR }}/android
+        run: rm -f dalel-release.jks key.properties

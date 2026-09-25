@@ -3,7 +3,14 @@ class AppConfig {
   AppConfig._();
 
   /// رأس الخادم المباشر (بدون شرطة لاحقة)
-  static const String baseUrl = 'https://t3lam.site/dalel';
+  ///
+  /// يمكن تغييره وقت البناء بلا تعديل الكود:
+  ///   flutter build apk --dart-define=DALEL_BASE_URL=https://t3lam.site/daleltest
+  /// فتبني نسخة تخاطب مسار الاختبار، وأخرى تخاطب المسار الأساسي.
+  static const String baseUrl = String.fromEnvironment(
+    'DALEL_BASE_URL',
+    defaultValue: 'https://t3lam.site/dalel',
+  );
 
   /// رأس نقاط النهاية البرمجية
   static const String apiBase = '$baseUrl/api';
