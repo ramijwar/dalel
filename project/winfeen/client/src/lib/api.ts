@@ -199,7 +199,8 @@ export const api = {
     // ─── تحديث تطبيق أندرويد ───
     appUpdate: () => request<{ update: AppUpdateInfo }>('/admin/app-update'),
     saveAppUpdate: (payload: Record<string, any>) =>
-      request<{ message: string; update: AppUpdateInfo }>('/admin/app-update', { method: 'PUT', body: payload }),
+      request<{ message: string; warning?: string | null; update: AppUpdateInfo }>(
+        '/admin/app-update', { method: 'PUT', body: payload }),
     /** فحص مجلد apk/ — يُمرَّر file لربط ملف بعينه، أو force لأخذ الأحدث دوماً */
     scanAppUpdate: (opts: { file?: string; force?: boolean } = {}) =>
       request<{ message: string; changed: boolean; detected: boolean; meta: any; update: AppUpdateInfo }>(

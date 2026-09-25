@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useStore } from '../../lib/store'
 import { api } from '../../lib/api'
-import type { AdminStats, ActivityItem, AppUpdateInfo, Category, CategoryField, Filter, FilterSourceOption, Governorate, Region, Service, ServiceRequest, User, Zone } from '../../lib/types'
+import type { AdminStats, ActivityItem, AppUpdateInfo, AppUpdatePathStatus, Category, CategoryField, Filter, FilterSourceOption, Governorate, Region, Service, ServiceRequest, User, Zone } from '../../lib/types'
 import { useToast } from '../../lib/useToast'
 import { num, fmtDateTime, fmtDate } from '../../lib/utils'
 import Icon from '../../components/Icon'
@@ -1391,6 +1391,7 @@ function AppUpdateTab() {
   const [notes, setNotes] = useState('')
   const [force, setForce] = useState(false)
   const [url, setUrl] = useState('')
+  const [path, setPath] = useState('')
 
   const [file, setFile] = useState<File | null>(null)
   const [percent, setPercent] = useState(0)
@@ -1405,6 +1406,7 @@ function AppUpdateTab() {
       setNotes(r.update.notes)
       setForce(!!r.update.force)
       setUrl(r.update.url ?? '')
+      setPath(r.update.path_status?.path ?? '')
     } catch {
       toast('تعذّر تحميل حالة التحديث', 'error')
     }
@@ -1420,6 +1422,7 @@ function AppUpdateTab() {
     setNotes(u.notes)
     setForce(!!u.force)
     setUrl(u.url ?? '')
+    if (u.path_status) setPath(u.path_status.path)
   }
 
   const save = async (e: React.FormEvent) => {
@@ -1428,10 +1431,12 @@ function AppUpdateTab() {
       const r = await api.admin.saveAppUpdate({
         version_name: versionName,
         version_code: Number(versionCode) || 0,
-        notes, force, url,
+        notes, force, url, path,
       })
       applyResult(r.update)
       toast(r.message)
+      // تحذير الخادم: الرقم الذي أدخلته يخالف الرقم داخل الملف
+      if (r.warning) toast(r.warning, 'error')
     } catch (err: any) { toast(err?.message || 'فشل الحفظ', 'error') }
     setBusy(false)
   }
@@ -1471,6 +1476,11 @@ function AppUpdateTab() {
 
   if (loading) return <div className="empty-state"><p>جارٍ التحميل…</p></div>
   if (!info) return <div className="empty-state"><p>تعذّر تحميل البيانات</p></div>
+
+  // حالة المسار: من الخادم بعد الحفظ، ومقارنة فورية لما يكتبه المدير الآن
+  const pathStatus: AppUpdatePathStatus | undefined = info.path_status
+  const pathEdited = path.trim() !== (pathStatus?.path ?? '')
+  const fileMatchesPath = !!info.apks_in_dir?.some((f) => `apk/${f.name}` === path.trim().replace(/^\//, ''))
 
   const limit = info.upload_limit ?? 0
   const fileTooBig = !!file && limit > 0 && file.size > limit
@@ -1585,6 +1595,42 @@ function AppUpdateTab() {
         <div className="admin-form__section">
           <h4><Icon name="info" size={16} /> بيانات التحديث</h4>
 
+          {/* ═══ مسار الملف — المصدر الذي يُنزَّل منه ═══ */}
+          <label><span>مسار الملف</span>
+            <input
+              value={path}
+              onChange={(e) => setPath(e.target.value)}
+              dir="ltr"
+              placeholder="apk/dalel-1.2.0.apk — أو https://…/app.apk"
+            />
+          </label>
+          <div className={`appup__path${pathStatus?.found && !pathEdited ? ' is-ok' : pathStatus ? ' is-bad' : ''}`}>
+            <Icon name={pathStatus?.found && !pathEdited ? 'check' : 'info'} size={14} />
+            <div>
+              <strong>
+                {pathEdited
+                  ? (fileMatchesPath
+                    ? 'الملف موجود في مجلد apk/ — اضغط «حفظ بيانات التحديث» لتثبيت المسار'
+                    : 'لم يُحفظ هذا المسار بعد — اضغط «حفظ بيانات التحديث»')
+                  : (pathStatus?.message ?? 'جارٍ التحقق…')}
+              </strong>
+              {pathStatus?.found && pathStatus.kind !== 'url' && (
+                <span className="appup__sub">
+                  {' '}· {pathStatus.size_h || ''}
+                  {pathStatus.meta?.versionName ? ` · الإصدار داخل الملف: ${pathStatus.meta.versionName} (${pathStatus.meta.versionCode})` : ''}
+                </span>
+              )}
+              {pathStatus?.web_path && (
+                <span className="appup__sub"> · رابط التنزيل: <code dir="ltr">{pathStatus.web_path}</code></span>
+              )}
+            </div>
+          </div>
+          <p className="admin-form__hint">
+            اكتب مسار الملف على موقعك (يُقرأ الإصدار من داخله تلقائياً)، أو رابطاً كاملاً
+            يبدأ بـ <code dir="ltr">https://</code>. مثال: <code dir="ltr">apk/dalel-1.2.0.apk</code>
+            {' '}— أو استعمل الرفع/الفحص أسفله فيُملأ هذا الحقل تلقائياً.
+          </p>
+
           <label><span>الإصدار (versionName)</span>
             <input value={versionName} onChange={(e) => setVersionName(e.target.value)} dir="ltr" placeholder="1.2.0" />
           </label>
@@ -1597,6 +1643,13 @@ function AppUpdateTab() {
             يُقرأ رقمان تلقائياً من داخل ملف APK عند رفعه. التطبيق يقارن رقم البناء بمثبَّته،
             فإن كان رقمك أكبر ظهر التنبيه. <strong>كبّر الرقم في كل إصدار</strong> (1 ← 2 ← 3).
           </p>
+          {pathStatus?.meta?.versionCode && Number(versionCode) > 0
+            && pathStatus.meta.versionCode !== Number(versionCode) && (
+            <p className="admin-form__err">
+              تنبيه: رقم البناء داخل الملف هو {pathStatus.meta.versionCode}، والذي أدخلته {versionCode}.
+              التطبيقات تقارن برقمك — تأكد أنه الأكبر.
+            </p>
+          )}
 
           <label><span>ما الجديد في هذا الإصدار؟</span>
             <textarea

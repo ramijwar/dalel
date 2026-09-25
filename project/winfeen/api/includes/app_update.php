@@ -25,6 +25,7 @@ function app_apk_dir(): string
 function app_update_raw(): array
 {
     return [
+        'path'         => app_update_path_raw(),
         'apk_file'     => (string) setting('app_apk_file', ''),
         'version_name' => (string) setting('app_version_name', ''),
         'version_code' => (int) setting('app_version_code', '0'),
@@ -34,6 +35,129 @@ function app_update_raw(): array
         'size'         => (int) setting('app_apk_size', '0'),
         'sha256'       => (string) setting('app_apk_sha256', ''),
         'uploaded_at'  => (int) setting('app_apk_uploaded_at', '0'),
+    ];
+}
+
+// ═════════════════════════════════════════════════════════════
+//  «مسار الملف» — يُحدّده المدير من لوحة التحكم
+//  يقبل:  apk/dalel-1.2.0.apk   ·   /apk/dalel-1.2.0.apk
+//         ·   رابطاً كاملاً https://…
+// ═════════════════════════════════════════════════════════════
+
+/** المسار كما أدخله المدير (بلا تنظيف — للعرض) */
+function app_update_path_raw(): string
+{
+    return trim((string) setting('app_update_path', ''));
+}
+
+/** هل المسار رابط خارجي؟ */
+function app_update_is_url(string $p): bool
+{
+    return (bool) preg_match('#^https?://#i', $p);
+}
+
+/** جذر الموقع (المجلد الذي يضمّ router.php و api/ و apk/) */
+function app_update_site_root(): string
+{
+    $root = realpath(dirname(APP_ROOT));
+    return $root === false ? dirname(APP_ROOT) : $root;
+}
+
+/**
+ * يحوّل مسار المدير إلى ملف حقيقي على القرص.
+ * يُرجع null إن كان رابطاً خارجياً، أو غير موجوداً، أو خارج الموقع،
+ * أو ليس ملف APK. (حماية من الخروج من الجذر بـ «..»).
+ */
+function app_update_resolve_local(?string $path = null): ?string
+{
+    $path = $path ?? app_update_path_raw();
+
+    // بلا مسار: ارتد إلى الملف المرفوع/المربوط في مجلد apk/
+    if ($path === '' || app_update_is_url($path)) {
+        $f = basename((string) setting('app_apk_file', ''));
+        if ($f === '' || !preg_match('/\.apk$/i', $f)) return null;
+        $p = app_apk_dir() . '/' . $f;
+        return is_file($p) ? $p : null;
+    }
+
+    // تطبيع المسار النسبي
+    $rel = str_replace('\\', '/', $path);
+    $rel = preg_replace('#^(\./)+#', '', ltrim($rel, '/')) ?? '';
+
+    if ($rel === '' || str_contains($rel, '..') || str_starts_with($rel, '/')) return null;
+    if (!preg_match('/\.apk$/i', $rel)) return null;
+
+    $full = app_update_site_root() . '/' . $rel;
+    $real = realpath($full);
+    if ($real === false || !is_file($real)) return null;
+
+    // تأكيد أن الملف داخل الموقع (لا خروج عبر روابط رمزية)
+    $rootReal = app_update_site_root();
+    if (!str_starts_with($real, rtrim($rootReal, '/') . '/')) return null;
+
+    return $real;
+}
+
+/** المسار النسبي للملف داخل الموقع — لبناء رابط التنزيل */
+function app_update_web_path(?string $file): ?string
+{
+    if ($file === null) return null;
+    $root = rtrim(str_replace('\\', '/', app_update_site_root()), '/');
+    $real = str_replace('\\', '/', $file);
+    if (!str_starts_with($real, $root . '/')) return null;
+    $rel = substr($real, strlen($root) + 1);
+    // ترميز كل مقطع على حدة (المجلدات قد تحوي فراغاً)
+    return implode('/', array_map('rawurlencode', explode('/', $rel)));
+}
+
+/** حالة المسار — للعرض في لوحة التحكم */
+function app_update_path_status(): array
+{
+    $path = app_update_path_raw();
+
+    if ($path === '') {
+        $file = app_update_resolve_local('');
+        $web  = app_update_web_path($file);
+        return [
+            'path'        => '',
+            'kind'        => $file !== null ? 'apk_dir' : 'none',
+            'found'       => $file !== null,
+            'web_path'    => $web,
+            'size'        => $file !== null ? (int) filesize($file) : 0,
+            'size_h'      => $file !== null ? human_size((int) filesize($file)) : '',
+            'meta'        => $file !== null ? apk_read_meta($file) : null,
+            'message'     => $file !== null
+                ? 'يُستعمل الملف المرفوع في مجلد ' . APP_APK_DIRNAME . '/'
+                : 'لم يُحدَّد مسار ولم يُرفع ملف',
+        ];
+    }
+
+    if (app_update_is_url($path)) {
+        return [
+            'path' => $path, 'kind' => 'url', 'found' => true, 'web_path' => null,
+            'size' => 0, 'size_h' => '', 'meta' => null,
+            'message' => 'رابط خارجي — يُنزِّل التطبيق منه مباشرةً',
+        ];
+    }
+
+    $file = app_update_resolve_local($path);
+    $meta = $file !== null ? apk_read_meta($file) : null;
+
+    return [
+        'path'     => $path,
+        'kind'     => 'local',
+        'found'    => $file !== null,
+        'web_path' => app_update_web_path($file),
+        'size'     => $file !== null ? (int) filesize($file) : 0,
+        'size_h'   => $file !== null ? human_size((int) filesize($file)) : '',
+        'meta'     => $meta,
+        'message'  => $file !== null
+            ? 'الملف موجود على الخادم'
+            : (str_contains($path, '..')
+                ? 'مسار غير صالح (لا يُسمح بالخروج من مجلد الموقع)'
+                : (!preg_match('/\.apk$/i', $path)
+                    ? 'يجب أن ينتهي المسار بـ .apk'
+                    : 'لم يُعثر على الملف في هذا المسار على الخادم')),
     ];
 }
 
@@ -48,13 +172,24 @@ function app_update_file_exists(?string $file = null): bool
 /** رابط التنزيل المطلق — يتعامل مع أي مجلد فرعي (/ أو /daleltest) */
 function app_update_download_url(): string
 {
+    // ١) رابط خارجي صريح (الحقل القديم)
     $url = trim((string) setting('app_update_url', ''));
     if ($url !== '') return $url;
 
-    $file = (string) setting('app_apk_file', '');
+    // ٢) «مسار الملف» الذي أدخله المدير
+    $path = app_update_path_raw();
+    if (app_update_is_url($path)) return $path;
+
+    if ($path !== '') {
+        $web = app_update_web_path(app_update_resolve_local($path));
+        return $web === null ? '' : base_url() . '/' . $web;
+    }
+
+    // ٣) الملف المرفوع/المربوط في مجلد apk/
+    $file = basename((string) setting('app_apk_file', ''));
     if ($file === '') return '';
 
-    return base_url() . '/' . APP_APK_DIRNAME . '/' . rawurlencode(basename($file));
+    return base_url() . '/' . APP_APK_DIRNAME . '/' . rawurlencode($file);
 }
 
 /**
@@ -92,21 +227,28 @@ function base_url(): string
  */
 function app_update_public(): array
 {
-    $r        = app_update_raw();
-    $hasFile  = app_update_file_exists($r['apk_file']);
-    $url      = app_update_download_url();
-    $code     = (int) $r['version_code'];
+    $r       = app_update_raw();
+    $url     = app_update_download_url();
+    $local   = app_update_resolve_local();
+    $hasFile = $local !== null;
+    $code    = (int) $r['version_code'];
+    $isUrl   = app_update_is_url($r['path']);
+
+    // الملف موجود (محلياً أو رابطاً) والأرقام صالحة؟
+    $ready = ($hasFile || $isUrl || $url !== '') && $code > 0 && $r['version_name'] !== '';
 
     return [
-        'available'    => ($hasFile || $r['url'] !== '') && $code > 0 && $r['version_name'] !== '',
+        'available'    => $ready,
         'version_name' => $r['version_name'],
         'version_code' => $code,
         'notes'        => $r['notes'],
         'force'        => (bool) $r['force'],
-        'size'         => $r['size'],
+        'size'         => $hasFile ? (int) filesize($local) : (int) $r['size'],
         'sha256'       => $r['sha256'],
         'url'          => $url,
         'has_file'     => $hasFile,
+        // ما يعرضه التطبيق للتشخيص: من أين سيُنزَّل
+        'source'       => $isUrl ? 'url' : ($hasFile ? 'server' : 'none'),
         'published_at' => $r['uploaded_at'] > 0 ? date('c', $r['uploaded_at']) : null,
     ];
 }
@@ -118,8 +260,11 @@ function app_update_admin(): array
     $dir  = app_apk_dir();
     $file = $dir . '/' . basename($r['apk_file']);
 
+    $local = app_update_resolve_local();
+
     return $r + [
-        'has_file'      => app_update_file_exists($r['apk_file']),
+        'path_status'   => app_update_path_status(),
+        'has_file'      => $local !== null,
         'download_url'  => app_update_download_url(),
         'dir'           => APP_APK_DIRNAME . '/',
         'dir_writable'  => is_dir($dir) ? is_writable($dir) : is_writable(dirname($dir)),
@@ -396,6 +541,7 @@ function app_update_attach_file(string $file): array
     if (!is_file($path)) return ['ok' => false, 'message' => 'الملف غير موجود في مجلد apk/'];
 
     set_setting('app_apk_file', basename($file));
+    set_setting('app_update_path', APP_APK_DIRNAME . '/' . basename($file));
     set_setting('app_apk_size', (string) filesize($path));
     set_setting('app_apk_sha256', (string) @hash_file('sha256', $path));
     set_setting('app_apk_uploaded_at', (string) time());
@@ -455,6 +601,7 @@ function app_update_scan(bool $force = false): array
 
     if ($fileCode > 0 && $storedCode > 0 && $fileCode < $storedCode) {
         set_setting('app_apk_file', $best['name']);
+        set_setting('app_update_path', APP_APK_DIRNAME . '/' . $best['name']);
         set_setting('app_apk_size', (string) filesize(app_apk_dir() . '/' . $best['name']));
         set_setting('app_apk_sha256', (string) @hash_file('sha256', app_apk_dir() . '/' . $best['name']));
         set_setting('app_apk_uploaded_at', (string) time());
@@ -517,6 +664,42 @@ function admin_app_update_save(): void
         set_setting('app_update_force', !empty($b['force']) ? '1' : '0');
     }
 
+    // ─── مسار الملف (المصدر الأساسي للتنزيل) ───
+    if (array_key_exists('path', $b)) {
+        $path = str_trim((string) $b['path'], 500);
+
+        if ($path !== '' && !app_update_is_url($path)) {
+            // مسار محلي: يجب أن ينتهي بـ .apk وألّا يخرج من مجلد الموقع
+            if (str_contains($path, '..')) {
+                fail('مسار غير صالح — لا يُسمح بالخروج من مجلد الموقع');
+            }
+            if (!preg_match('/\.apk$/i', $path)) {
+                fail('مسار الملف يجب أن ينتهي بـ .apk');
+            }
+        }
+
+        set_setting('app_update_path', $path);
+
+        // إن كان ملفاً محلياً موجوداً: اقرأ حجمه وبصمته، واقرأ الإصدار من داخله
+        $file = app_update_resolve_local($path);
+        if ($file !== null) {
+            set_setting('app_apk_size', (string) filesize($file));
+            set_setting('app_apk_sha256', (string) @hash_file('sha256', $file));
+            set_setting('app_apk_uploaded_at', (string) time());
+
+            $meta = apk_read_meta($file);
+            if ($meta !== null && $meta['versionCode'] > 0) {
+                // املأ الرقمين إن كانا فارغين — ولا تلمس ما أدخله المدير
+                if ((int) setting('app_version_code', '0') <= 0) {
+                    set_setting('app_version_code', (string) $meta['versionCode']);
+                }
+                if ((string) setting('app_version_name', '') === '') {
+                    set_setting('app_version_name', $meta['versionName']);
+                }
+            }
+        }
+    }
+
     if (array_key_exists('url', $b)) {
         $url = str_trim((string) $b['url'], 500);
         // https/http فقط — لا javascript: ولا مسارات غريبة
@@ -526,12 +709,27 @@ function admin_app_update_save(): void
         set_setting('app_update_url', $url);
     }
 
-    $pub = app_update_public();
+    $pub    = app_update_public();
+    $status = app_update_path_status();
+
+    // تحذير: رقم البناء الذي أدخله المدير يخالف الرقم داخل الملف
+    $meta   = $status['meta'] ?? null;
+    $warn   = null;
+    if (is_array($meta) && (int) ($meta['versionCode'] ?? 0) > 0
+        && (int) $meta['versionCode'] !== (int) $pub['version_code']) {
+        $warn = 'رقم البناء الذي أدخلته (' . $pub['version_code'] . ') يخالف الرقم داخل الملف ('
+            . (int) $meta['versionCode'] . '). التطبيقات تقارن برقمك — تأكد أنه الأكبر.';
+    }
+
     log_activity('update_settings', 'app', null,
         'تحديث تطبيق أندرويد: ' . ($pub['version_name'] !== '' ? $pub['version_name'] : '—')
         . ' (كود ' . $pub['version_code'] . ')');
 
-    ok(['message' => 'تم حفظ إعدادات التحديث', 'update' => app_update_public()]);
+    ok([
+        'message' => 'تم حفظ إعدادات التحديث',
+        'warning' => $warn,
+        'update'  => app_update_admin(),
+    ]);
 }
 
 /**
@@ -674,6 +872,11 @@ function admin_app_update_delete(): void
     }
 
     set_setting('app_apk_file', '');
+    // امسح المسار فقط إن كان يشير إلى ملف داخل مجلد apk/ (لا رابطاً خارجياً اختاره المدير)
+    $p = app_update_path_raw();
+    if ($p === '' || str_starts_with(ltrim($p, '/'), APP_APK_DIRNAME . '/')) {
+        set_setting('app_update_path', '');
+    }
     set_setting('app_apk_size', '0');
     set_setting('app_apk_sha256', '');
     set_setting('app_apk_uploaded_at', '0');

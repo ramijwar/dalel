@@ -308,6 +308,22 @@ export interface ApkFile {
   current: boolean
 }
 
+/** حالة «مسار الملف» في لوحة تحديث التطبيق */
+export interface AppUpdatePathStatus {
+  /** المسار كما كتبه المدير */
+  path: string
+  /** 'local' مسار داخل الموقع · 'url' رابط خارجي · 'apk_dir' الملف المرفوع · 'none' */
+  kind: 'local' | 'url' | 'apk_dir' | 'none'
+  found: boolean
+  /** المسار النسبي للتنزيل (للملفات المحلية) */
+  web_path: string | null
+  size: number
+  size_h: string
+  /** الإصدار المقروء من داخل الملف — للمقارنة برقم المدير */
+  meta: { package?: string; versionCode?: number; versionName?: string } | null
+  message: string
+}
+
 /** حالة تحديث تطبيق أندرويد — كما يراها التطبيق ولوحة التحكم */
 export interface AppUpdateInfo {
   version_name: string
@@ -334,6 +350,7 @@ export interface AppUpdateInfo {
   post_max?: string
   file_size_h?: string
   apks_in_dir?: ApkFile[]
+  path_status?: AppUpdatePathStatus
 }
 
 export interface MetaResponse {
