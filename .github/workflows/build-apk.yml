@@ -73,6 +73,10 @@ env:
   FLUTTER_VERSION: ${{ inputs.flutter_version || '3.27.4' }}
   APP_DIR: project/dalel_android
 
+# صيغة موحّدة: تُعلن أسطر الخطأ المفيدة كتعليقات في واجهة Actions
+# (كانت الأخطاء مدفونة في سجل طويل — هكذا تظهر للمدير مباشرةً)
+# وSHOW_LOG_ERRORS يُبقي السجل الكامل عند الحاجة.
+
 jobs:
   # ═══════════════════════════════════════════════════════════
   #  الفحص — يعمل بالتوازي ولا يمنع البناء (تقرير فقط)
@@ -96,11 +100,37 @@ jobs:
 
       - name: تحليل الكود
         working-directory: ${{ env.APP_DIR }}
-        run: flutter analyze --no-pub --no-fatal-infos --no-fatal-warnings
+        run: |
+          set +e
+          flutter analyze --no-pub --no-fatal-infos --no-fatal-warnings 2>&1 | tee /tmp/analyze.log
+          rc=${PIPESTATUS[0]}
+          if [ "$rc" -ne 0 ]; then
+            {
+              echo "::group::نتيجة التحليل"
+              tail -n 40 /tmp/analyze.log
+              echo "::endgroup::"
+            }
+            grep -nE '^ *error|error •|error -' /tmp/analyze.log | tail -n 8 | while IFS= read -r l; do
+              echo "::error title=فشل التحليل::$l"
+            done
+            exit "$rc"
+          fi
+          tail -n 3 /tmp/analyze.log
 
       - name: الاختبارات
         working-directory: ${{ env.APP_DIR }}
-        run: flutter test --no-pub --reporter expanded
+        run: |
+          set +e
+          flutter test --no-pub --reporter expanded 2>&1 | tee /tmp/test.log
+          rc=${PIPESTATUS[0]}
+          if [ "$rc" -ne 0 ]; then
+            grep -nE '^[0-9:]+ \+[0-9]+ -[0-9]+|Some tests failed|Expected:|Actual:' /tmp/test.log | tail -n 8 | while IFS= read -r l; do
+              echo "::error title=اختبار فاشل::$l"
+            done
+            tail -n 30 /tmp/test.log
+            exit "$rc"
+          fi
+          grep -E 'All tests passed|\+[0-9]+:' /tmp/test.log | tail -n 2
 
   # ═══════════════════════════════════════════════════════════
   #  البناء — يُنتج ملف APK
@@ -215,13 +245,41 @@ jobs:
         run: |
           echo "::warning title=توقيع التصحيح::لا يوجد مفتاح إصدار — سيُوقَّع الملف بمفاتيح التصحيح. التحديثات التلقائية تحتاج نفس مفتاح التوقيع دائماً؛ أضف KEYSTORE_BASE64 في أسرار المستودع قبل التوزيع الجدّي."
 
-      - name: بناء الحزمة
+      - name: أسباب محتملة قبل البناء (تشخيص)
+        if: always()
         working-directory: ${{ env.APP_DIR }}
         run: |
+          echo "── إصدارات البناء ──"
+          flutter --version
+          grep -E 'distributionUrl' android/gradle/wrapper/gradle-wrapper.properties || true
+          grep -E 'com.android.application' android/settings.gradle || true
+          grep -E 'ndkVersion|compileSdk|signingConfig' android/app/build.gradle || true
+          ls "$ANDROID_HOME/ndk" 2>/dev/null || echo "لا يوجد أي NDK مثبّت"
+
+      - name: بناء الحزمة
+        id: apk
+        working-directory: ${{ env.APP_DIR }}
+        run: |
+          set +e
           flutter build apk --${{ steps.ver.outputs.type }} \
             --build-name="${{ steps.ver.outputs.name }}" \
             --build-number="${{ steps.ver.outputs.code }}" \
-            --dart-define=DALEL_BASE_URL="${{ steps.ver.outputs.url }}"
+            --dart-define=DALEL_BASE_URL="${{ steps.ver.outputs.url }}" 2>&1 | tee /tmp/build.log
+          rc=${PIPESTATUS[0]}
+          if [ "$rc" -ne 0 ]; then
+            {
+              echo "::group::آخر ٦٠ سطراً من سجل البناء"
+              tail -n 60 /tmp/build.log
+              echo "::endgroup::"
+            }
+            # الأسطر المفيدة فقط — كي يرى المدير السبب بلا قراءة سجل ضخم
+            grep -inE 'what went wrong|^\s*error|error:|failure:|failed|not found|could not|unable to|requires|exception|incompatible' \
+              /tmp/build.log | tail -n 10 | while IFS= read -r l; do
+              echo "::error title=فشل البناء::$(echo "$l" | cut -c1-220)"
+            done
+            exit "$rc"
+          fi
+          tail -n 3 /tmp/build.log
 
       # ─── التجهيز والنشر ───
       - name: تجهيز الملفات والبصمة
