@@ -153,6 +153,25 @@ function category_fields_map(array $categoryIds): array
  * @param array $meta       محتوى services.meta
  * @return array            [{key,label,type,value,display,icon}]
  */
+/**
+ * هل هذا الحقل «سعر»؟ يقرر أيقونته (💵 لسعر المعاينة · # للأرقام الأخرى).
+ *
+ * الفحص بالمفتاح الإنجليزي والاسم العربي معاً، فيعمل مع أي قسم يضيف المدير
+ * فيه حقلاً اسمه price أو cost أو «تكلفة» أو «أجرة» — بلا قائمة أقسام ثابتة.
+ */
+function is_price_field(string $key, string $label = ''): bool
+{
+    $hay = mb_strtolower($key . ' ' . $label, 'UTF-8');
+    foreach (['price', 'cost', 'fee', 'fare', 'charge', 'tuition', 'salary'] as $w) {
+        if (str_contains($hay, $w)) return true;
+    }
+    foreach (['سعر', 'أسعار', 'ثمن', 'تكلفة', 'كلفة', 'أجرة', 'اجرة', 'أجور',
+              'رسوم', 'رسم', 'مبلغ', 'دفعة', 'اشتراك', 'بدل'] as $w) {
+        if (mb_strpos($hay, $w, 0, 'UTF-8') !== false) return true;
+    }
+    return false;
+}
+
 function resolve_service_fields(int $categoryId, array $meta): array
 {
     $fields = category_fields_list($categoryId);
@@ -253,7 +272,9 @@ function resolve_service_fields(int $categoryId, array $meta): array
             'type'    => $type,
             'value'   => $rawStr,
             'display' => $display,
-            'icon'    => $type === 'number' ? 'hash' : 'type',
+            'icon'    => ($type === 'number' && is_price_field($key, (string) $f['label']))
+                ? 'banknote'      // 💵 حقول الأسعار
+                : ($type === 'number' ? 'hash' : 'type'),
         ];
     }
     return $out;

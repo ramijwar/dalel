@@ -443,10 +443,13 @@ class _AccountScreenState extends State<AccountScreen> {
       ),
       child: Column(
         children: [
-          const _InfoLine(
+          // الرقم يُقرأ من حزمة التطبيق المثبَّتة (package_info_plus) لا من ثابت
+          // في الكود: كان مكتوباً هنا «1.1.0» فيبقى ظاهراً مهما ارتفع رقم
+          // الإصدار الحقيقي في pubspec وسيرِ البناء.
+          _InfoLine(
             icon: LucideIcons.tag,
             label: 'إصدار التطبيق',
-            staticValue: '1.1.0',
+            textValue: () => UpdateService.instance.installedLabel(),
           ),
           const Divider(height: 18),
           _InfoLine(
@@ -584,12 +587,16 @@ class _InfoLine extends StatelessWidget {
   final bool isSync;
   final String? staticValue;
 
+  /// قيمة نصّية تُقرأ لاحقاً (مثل رقم الإصدار من حزمة التطبيق نفسها)
+  final Future<String> Function()? textValue;
+
   const _InfoLine({
     required this.icon,
     required this.label,
     this.value,
     this.isSync = false,
     this.staticValue,
+    this.textValue,
   });
 
   @override
@@ -622,6 +629,18 @@ class _InfoLine extends StatelessWidget {
             future: value!(),
             builder: (_, snap) => Text(
               snap.data?.toString() ?? '—',
+              style: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: AppTheme.textPrimary,
+              ),
+            ),
+          )
+        else if (textValue != null)
+          FutureBuilder<String>(
+            future: textValue!(),
+            builder: (_, snap) => Text(
+              snap.data ?? '—',
               style: const TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w700,

@@ -69,19 +69,32 @@ WEB_MAP = set(re.findall(r"^\s*'([a-z0-9-]+)':", block(web_src, 'LUCIDE_PATHS'),
 def api_field_icons():
     """أسماء الأيقونات الثابتة في fields.php (لا قيم الخيارات القادمة من القاعدة).
 
-    يحلّل كل سطر فيه `'icon' =>` ويأخذ الحروف اللاتينية بين علامتي تنصيص،
-    مع تجاهل معاملات المقارنة قبل علامة الاستفهام في التعبيرات الشرطية
-    (مثل `$type === 'number' ? 'hash' : 'type'` ⇒ hash · type).
+    التعبير قد يمتد على عدة أسطر (شرط ثلاثي متعدد الأسطر)، لذلك تُجمَع العبارة
+    كاملةً ثم يُستبعد منها:
+      • الوصول بعناصر المصفوفة:  $f['label']  ·  $o['icon']
+      • مقارنات النوع:            $type === 'number'
+    فيبقى ما هو اسم أيقونة فعلاً: 'banknote' · 'hash' · 'type' · 'check' · 'x'.
     """
+    src = read(os.path.join(ROOT, 'winfeen', 'api', 'includes', 'fields.php'))
+    lines = src.splitlines()
     out = set()
-    for line in read(os.path.join(ROOT, 'winfeen', 'api', 'includes', 'fields.php')).splitlines():
-        if "'icon'" not in line or '=>' not in line:
-            continue
-        expr = line.split('=>', 1)[1]
-        if '?' in expr:
-            expr = expr.split('?', 1)[1]
-        out |= set(re.findall(r"'([a-z0-9-]{2,})'", expr))
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+        if "'icon'" in line and '=>' in line:
+            # التعليق يُزال من كل سطر قبل الجمع — وإلا ابتلع تعليقٌ داخل
+            # التعبير بقيةَ الشرط الثلاثي (وهو ما أخفى hash و type).
+            stmt = line.split('//')[0]
+            while not stmt.rstrip().endswith(',') and i + 1 < len(lines):
+                i += 1
+                stmt += ' ' + lines[i].split('//')[0]
+            expr = stmt.split('=>', 1)[1]
+            expr = re.sub(r"\[[^\]]*\]", ' ', expr)            # $f['label']
+            expr = re.sub(r"[!=]==?\s*'[^']*'", ' ', expr)      # $type === 'number'
+            out |= set(re.findall(r"'([a-z0-9-]+)'", expr))
+        i += 1
     return out or {'hash', 'type'}
+
 
 API_FIELD_ICONS = api_field_icons()
 
