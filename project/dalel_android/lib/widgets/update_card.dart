@@ -109,7 +109,7 @@ class UpdateCard extends StatelessWidget {
                       ),
                     ),
                   ),
-                  if (s.isForced) _badge('إلزامي', AppTheme.danger, AppTheme.dangerBg),
+                  if (s.isForced) _badge('إلزامي', AppTheme.danger, AppTheme.closedBg),
                 ],
               ),
               const SizedBox(height: 3),
