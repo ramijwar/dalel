@@ -71,8 +71,7 @@ on:
   # بناء تلقائي عند تغيير كود التطبيق على الفرع الرئيسي
   # (يبقى الملف جاهزاً دائماً بلا انتظار طلب، والباقي عند الطلب من الزر)
   push:
-    # ⏳ توسيع مؤقت لفرع الجلسة لبناء الحزمة الرسمية 1.4.1+7 (يُعاد إلى [main])
-    branches: [main, arena/**]
+    branches: [main]
     paths:
       - 'project/dalel_android/**'
       - '.github/workflows/build-apk.yml'
