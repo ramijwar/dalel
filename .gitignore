@@ -60,6 +60,9 @@ __pycache__/
 project/winfeen/api/storage/secret.key
 project/winfeen/api/storage/*.key
 
+# ── مخرجات الترحيل (قواعد بيانات ونسخ للفحص) ──
+migration/
+
 # ── مفتاح توقيع الإصدار (release keystore) ──
 # أي ملف هنا يمنح من يحصل عليه القدرة على إصدار تحديثات موقّعة باسم التطبيق.
 # المجلد كله مستبعَد — ولو ضاع منه ملف واحد لأنشئت ثغرة صامتة.
