@@ -424,22 +424,26 @@ void main() {
       ));
       await tester.pumpAndSettle();
 
-      // افتح بطاقة «باص» ثم اختر اتجاهاً
+      // افتح بطاقة «باص»: تُعرض خدماتها وحدها
       await tester.tap(find.text('باص'));
       await tester.pumpAndSettle();
       expect(find.text('س١'), findsOneWidget);
-      expect(find.text('س٢'), findsOneWidget);
+      expect(find.text('س٢'), findsNothing,
+          reason: 'س٢ في بطاقة «إسعاف» — لا تُعرض داخل «باص»');
 
+      // اختر اتجاه «ديرالزور-حلب» من الشريحة الثانوية
+      await tester.ensureVisible(find.text('اتجاه السفر: الكل'));
       await tester.tap(find.text('اتجاه السفر: الكل'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('ديرالزور-حلب'));
       await tester.pumpAndSettle();
 
-      // الشريحة تعرض القيمة المختارة، والنتيجة خدمة واحدة
+      /* الفلتر الثانوي يُصفّي كل الخدمات ثم تُعاد البطاقات (‏_groupKey
+         يُفرَّغ عند تغيير قيمة ثانوية) — فتبقى بطاقة «إسعاف» وحدها. */
       expect(find.text('اتجاه السفر: ديرالزور-حلب'), findsOneWidget);
-      expect(find.text('س٢'), findsOneWidget);
-      expect(find.text('س١'), findsNothing,
-          reason: 'س١ اتجاهها دمشق — يجب أن يحجبها فلتر الاتجاه');
+      expect(find.text('إسعاف'), findsOneWidget);
+      expect(find.text('باص'), findsNothing,
+          reason: 'س١ اتجاهها دمشق — يجب أن تُحجب بطاقتها');
     });
 
     testWidgets('الفلتر الثانوي لا يحجب خياراته بعد الاختيار',
@@ -450,12 +454,14 @@ void main() {
       ));
       await tester.pumpAndSettle();
 
+      await tester.ensureVisible(find.text('اتجاه السفر: الكل'));
       await tester.tap(find.text('اتجاه السفر: الكل'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('ديرالزور-دمشق'));
       await tester.pumpAndSettle();
 
       // أعِد فتح القائمة: يجب أن يبقى الاتجاه الآخر قابلاً للاختيار مباشرةً
+      await tester.ensureVisible(find.text('اتجاه السفر: ديرالزور-دمشق'));
       await tester.tap(find.text('اتجاه السفر: ديرالزور-دمشق'));
       await tester.pumpAndSettle();
       expect(find.text('ديرالزور-حلب'), findsOneWidget,
@@ -474,13 +480,16 @@ void main() {
       ));
       await tester.pumpAndSettle();
 
+      await tester.ensureVisible(find.text('اتجاه السفر: الكل'));
       await tester.tap(find.text('اتجاه السفر: الكل'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('ديرالزور-دمشق'));
       await tester.pumpAndSettle();
       expect(find.text('اتجاه السفر: ديرالزور-دمشق'), findsOneWidget);
 
-      // «الكل» في الورقة السفلية
+      // «الكل» في الورقة السفلية — أعِد الشريحة إلى مجال الرؤية أولاً
+      // (نصها الطويل يخرج من عرض الشاشة في الصف الأفقي فتضيع النقرة)
+      await tester.ensureVisible(find.text('اتجاه السفر: ديرالزور-دمشق'));
       await tester.tap(find.text('اتجاه السفر: ديرالزور-دمشق'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('الكل'));
