@@ -366,33 +366,6 @@ jobs:
           tail -n 3 /tmp/build.log
 
       # ─── التجهيز والنشر ───
-      # ─── التحقق من رابط الخادم المخبوز في الحزمة ───
-      # `--dart-define` يُخبز الرابط داخل libapp.so، فنتأكد قبل التسليم أن
-      # الحزمة تخاطب الخادم المقصود فعلاً (وإلا لبُنيت نسخة تخاطب غيره بلا أن
-      # يظهر ذلك في أي مكان). تنبيه لا فشل: الأهم ألّا تخرج حزمة صامتة.
-      - name: التحقق من رابط الخادم داخل الحزمة
-        if: ${{ steps.apk.outcome == 'success' }}
-        working-directory: ${{ env.APP_DIR }}
-        run: |
-          set +e
-          APK="${{ steps.ver.outputs.apk }}"
-          WANT="${{ steps.ver.outputs.url }}"
-          TMP=$(mktemp -d)
-          unzip -qq -o "$APK" 'lib/*/libapp.so' -d "$TMP" 2>/dev/null
-          SO=$(ls "$TMP"/lib/*/libapp.so 2>/dev/null | head -n 1)
-          if [ -z "$SO" ]; then
-            echo "::warning title=تعذّر التحقق::لم يُستخرج libapp.so من $APK"
-            exit 0
-          fi
-          FOUND=$(grep -ao 't3lam\.site/dalel[a-z]*' "$SO" 2>/dev/null | sort -u | paste -sd ', ' -)
-          echo "الرابط المتوقّع: $WANT"
-          echo "الرابط الموجود في libapp.so: ${FOUND:-لم يُعثر على أي رابط}"
-          if grep -aqF "$WANT" "$SO"; then
-            echo "✅ الحزمة تخاطب الخادم المقصود: $WANT"
-          else
-            echo "::warning title=رابط الخادم غير مطابق::المتوقّع '$WANT' — والموجود في الحزمة: '${FOUND:-لا شيء}'"
-          fi
-
       - name: تجهيز الملفات والبصمة
         id: pack
         working-directory: ${{ env.APP_DIR }}
@@ -445,6 +418,53 @@ jobs:
       # ─── التحقق من التوقيع: بصمة المفتاح الذي وقّع الملف فعلاً ───
       # مهمّ لمتجر Google Play: يجب أن يكون الملف موقّعاً بمفتاحك لا بمفاتيح
       # التصحيح. تُطبع البصمة هنا فيصبح الأمر قابلاً للتأكد لا للافتراض.
+      # ─── التحقق من رابط الخادم المخبوز في الحزمة ───
+      # `--dart-define` يُخبز الرابط داخل libapp.so؛ فنتأكد قبل التسليم أن
+      # الحزمة تخاطب الخادم المقصود فعلاً — وإلا خرجت نسخة تخاطب غيره بلا
+      # أن يظهر ذلك في أي مكان. تنبيه لا فشل: نُبلّغ ولا نُسقط البناء.
+      # موضعه بعد «تجهيز الملفات» لأن اسم الملف النهائي يُنشأ هناك.
+      - name: التحقق من رابط الخادم داخل الحزمة
+        if: ${{ steps.pack.outcome == 'success' }}
+        working-directory: ${{ env.APP_DIR }}
+        env:
+          APK_FILE: ${{ steps.ver.outputs.apk }}
+          WANT_URL: ${{ steps.ver.outputs.url }}
+        run: |
+          set +e
+          python3 - <<'PY'
+          import os, re, sys, zipfile
+
+          apk = os.environ.get('APK_FILE', '')
+          want = os.environ.get('WANT_URL', '')
+          if not os.path.isfile(apk):
+              print('::warning title=تعذّر التحقق::ملف الحزمة غير موجود: ' + apk)
+              sys.exit(0)
+          try:
+              z = zipfile.ZipFile(apk)
+              names = [n for n in z.namelist()
+                       if n.startswith('lib/') and n.endswith('libapp.so')]
+              if not names:
+                  print('::warning title=تعذّر التحقق::لا يوجد libapp.so داخل ' + apk)
+                  sys.exit(0)
+              data = z.read(names[0])
+          except Exception as exc:
+              print('::warning title=تعذّر التحقق::' + str(exc))
+              sys.exit(0)
+
+          found = sorted({m.decode('utf-8', 'replace')
+                          for m in re.findall(rb't3lam\.site/dalel[a-z]*', data)})
+          print('الرابط المتوقّع: ' + want)
+          print('الموجود في ' + names[0] + ': ' + (', '.join(found) or 'لم يُعثر على أي رابط'))
+          # حدٌّ لاحق يمنع المطابقة بالبادئة: 'daleltest' تبدأ بـ'dalel'
+          ok = bool(want) and re.search(
+              re.escape(want).encode() + rb'(?![A-Za-z0-9])', data) is not None
+          if ok:
+              print('✅ الحزمة تخاطب الخادم المقصود: ' + want)
+          else:
+              print('::warning title=رابط الخادم غير مطابق::المتوقّع '
+                    + want + ' — والموجود: ' + (', '.join(found) or 'لا شيء'))
+          PY
+
       - name: التحقق من التوقيع
         id: sign
         if: always()
