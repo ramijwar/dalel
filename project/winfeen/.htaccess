@@ -16,7 +16,10 @@
   RewriteRule ^api/storage(/.*)?$ - [F,L]
 
   # ٢. سكربتات الصيانة (تحذف البيانات) — لا تُشغَّل عبر الويب
-  RewriteRule ^api/(install|seed|migrate_fields)\.php$ - [F,L]
+  #    النمط السابق كان (install|seed|migrate_fields)\.php$ ولم يكن يطابق
+  #    migrate_fields_v2.php ولا set_password.php (كلاهما يحمي نفسه برمجياً،
+  #    لكن الحجب هنا طبقة أمان إضافية لا تعتمد على كود PHP).
+  RewriteRule ^api/(install|seed|migrate_fields[^/]*|set_password)\.php$ - [F,L]
 
   # ٣. أي ملف بامتداد حسّاس في أي مكان
   RewriteRule \.(sqlite|sqlite3|db|key|bak|backup|sql)$ - [F,L]
