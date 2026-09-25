@@ -146,7 +146,8 @@ jobs:
               infail && /^[0-9][0-9]:[0-9][0-9] / { if (buf != "") print buf; buf=""; infail=0 }
               infail {
                 l=$0; gsub(/^[ \t]+|[ \t]+$/, "", l);
-                if (l != "" && buf !~ l) buf = buf " » " l
+                # index() مقارنة نصية — لتفادي أن يُفسَّر النص كتعبير نمطي
+                if (l != "" && index(buf, l) == 0) buf = buf " » " l
               }
               END { if (infail && buf != "") print buf }
             ' /tmp/test.log | head -n 12 | while IFS= read -r l; do
