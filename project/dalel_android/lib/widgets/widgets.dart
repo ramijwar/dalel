@@ -179,9 +179,22 @@ class CategoryCard extends StatelessWidget {
 }
 
 // ═══════════════ بطاقة التجميع (المستوى الأول) ═══════════════
+/// بطاقة تجميع (منطقة · اختصاص · نوع مركبة) — **بنفس شكل بطاقة الخدمة**.
+///
+/// كانت شريحة أفقية يتمدّد عرضها بحسب طول الاسم وعدده، فتظهر صفوفاً غير
+/// منتظمة فوق بطاقات الخدمة المربّعة — لا يشبه بعضها بعضاً. صارت الآن بطاقة
+/// رأسية مثل MiniServiceCard تماماً (أيقونة في مربّع ملوّن · الاسم · شريحة
+/// العدّ)، فتصطفّ في الشبكة نفسها بثلاثة أعمدة وبنفس المقاسات، وهو شكل
+/// بطاقات المناطق في الويب (‎.rcard‎ داخل ‎.regions__grid‎).
 class GroupCard extends StatelessWidget {
   final String title;
+
+  /// إجمالي خدمات المجموعة
   final int count;
+
+  /// كم منها تعمل الآن — يُعرض مكان العدد (كما في الويب: «٣ تعمل»)
+  final int open;
+
   final bool selected;
   final Widget icon;
   final VoidCallback onTap;
@@ -190,22 +203,25 @@ class GroupCard extends StatelessWidget {
     super.key,
     required this.title,
     required this.count,
+    this.open = 0,
     required this.selected,
     required this.onTap,
-    this.icon =
-        const Icon(LucideIcons.mapPin, size: 15, color: AppTheme.textSecondary),
+    this.icon = const Icon(LucideIcons.mapPin,
+        size: 21, color: AppTheme.primary),
   });
 
   @override
   Widget build(BuildContext context) {
+    final isOpen = open > 0;
+
     return Material(
       color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(AppTheme.radius),
         child: AnimatedContainer(
-          duration: const Duration(milliseconds: 180),
-          padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 11),
+          duration: const Duration(milliseconds: 170),
+          padding: const EdgeInsets.fromLTRB(5, 8, 5, 8),
           decoration: BoxDecoration(
             color: selected ? AppTheme.primary : AppTheme.surface,
             borderRadius: BorderRadius.circular(AppTheme.radius),
@@ -215,38 +231,66 @@ class GroupCard extends StatelessWidget {
             ),
             boxShadow: selected ? AppTheme.softShadow : null,
           ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
+          /* الإيقاع الرأسي هنا مطابق لبطاقة الخدمة المصغّرة حرفياً
+             (٨ حشو · ٤٠ أيقونة · ٧ فاصل · سطران ١١ · ٥ فاصل · سطر الحالة · ٨)
+             فلا تختلف البطاقتان في الطول داخل الشبكة نفسها. */
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              icon,
-              const SizedBox(width: 6),
-              Flexible(
-                child: Text(
-                  title,
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                    color: selected ? Colors.white : AppTheme.textPrimary,
-                  ),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              const SizedBox(width: 6),
+              // ─── الأيقونة: نفس مربّع بطاقة الخدمة (٤٠×٤٠ · زوايا ١٢) ───
               Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                width: 40,
+                height: 40,
                 decoration: BoxDecoration(
                   color: selected
-                      ? Colors.white.withOpacity(0.25)
-                      : AppTheme.background,
+                      ? Colors.white.withOpacity(0.18)
+                      : AppTheme.primarySoft,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: icon,
+              ),
+              const SizedBox(height: 7),
+              // ─── الاسم (قابل للتقلّص: لا تجاوز على الشاشات الضيقة) ───
+              Flexible(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 2),
+                  child: Text(
+                    title,
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      height: 1.25,
+                      color: selected ? Colors.white : AppTheme.textPrimary,
+                    ),
+                    textAlign: TextAlign.center,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 5),
+              // ─── العدد: «٣ تعمل» أخضر، وإلا الإجمالي — كما في الويب ───
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 7),
+                decoration: BoxDecoration(
+                  color: selected
+                      ? Colors.white.withOpacity(0.22)
+                      : isOpen
+                          ? AppTheme.openBg
+                          : AppTheme.background,
                   borderRadius: BorderRadius.circular(999),
                 ),
                 child: Text(
-                  '$count',
+                  isOpen ? '$open تعمل' : '$count',
                   style: TextStyle(
-                    fontSize: 11,
+                    fontSize: 10,
                     fontWeight: FontWeight.w800,
-                    color: selected ? Colors.white : AppTheme.textMuted,
+                    height: 1.15,
+                    color: selected
+                        ? Colors.white
+                        : isOpen
+                            ? AppTheme.open
+                            : AppTheme.textMuted,
                   ),
                 ),
               ),

@@ -8,6 +8,7 @@ import 'package:dalel/models/models.dart';
 import 'package:dalel/providers/app_provider.dart';
 import 'package:dalel/providers/auth_provider.dart';
 import 'package:dalel/screens/section_screen.dart';
+import 'package:dalel/widgets/widgets.dart';
 
 /* ══════════════════════════════════════════════════════════════
  *  ميزة الفلاتر — طبقة التطبيق
@@ -501,6 +502,83 @@ void main() {
       await tester.tap(find.text('باص'));
       await tester.pumpAndSettle();
       expect(find.text('س١'), findsOneWidget);
+    });
+  });
+
+  /* ══════════════════════════════════════════════════════════════
+   *  شكل البطاقات — بطاقة المنطقة مثل بطاقة الخدمة
+   *
+   *  الشكوى: بطاقة المنطقة كانت شريحة أفقية يتمدّد عرضها بحسب طول
+   *  الاسم، فتظهر صفوفاً غير منتظمة فوق بطاقات الخدمة المربّعة.
+   *  المطلوب: نفس الشكل ونفس المقاس — كما في الويب (.rcard داخل
+   *  .regions__grid). هذه الاختبارات تثبّت ذلك وتمنع رجوعه.
+   * ══════════════════════════════════════════════════════════════ */
+  group('شكل البطاقات — المنطقة كبطاقة الخدمة', () {
+    final cat = Category.fromJson({
+      'id': 37,
+      'slug': 'pharmacies',
+      'name': 'صيدليات بشرية',
+      'layout': 'card',
+      'features': {'duty': true, 'schedule': true, 'status': true},
+      'filters': [
+        link(id: 6, key: 'region', label: 'المناطق', icon: 'map-pin'),
+      ],
+    });
+
+    final services = [
+      Service.fromJson(service(
+          id: 1, name: 'صيدلية أ', regionId: 701, regionName: 'الشيخ نجار')),
+      Service.fromJson(service(
+          id: 2, name: 'صيدلية ب', regionId: 701, regionName: 'الشيخ نجار')),
+      Service.fromJson(service(
+          id: 3,
+          name: 'صيدلية ج',
+          regionId: 702,
+          regionName: 'الهجانة',
+          status: 'closed')),
+    ];
+
+    Future<void> open(WidgetTester tester) async {
+      // مقاس هاتف حقيقي (٣٦٠×٨٠٠ منطقياً) — لا مقاس الاختبار الافتراضي
+      tester.view.physicalSize = const Size(1080, 2400);
+      tester.view.devicePixelRatio = 3.0;
+      addTearDown(() => tester.view.reset());
+      await tester.pumpWidget(harness(category: cat, services: services));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('بطاقة المنطقة رأسية بمقاس بطاقة الخدمة نفسه', (tester) async {
+      await open(tester);
+
+      // بطاقة لكل منطقة — لا شرائح متمدّدة بحسب طول الاسم
+      expect(find.byType(GroupCard), findsNWidgets(2),
+          reason: 'بطاقة لكل مجموعة في شبكة، لا Wrap');
+
+      // شريحة العدّ: «تعمل» للمنطقة المفتوحة، والإجمالي للمغلقة
+      expect(find.text('2 تعمل'), findsOneWidget);
+      expect(find.text('1'), findsOneWidget);
+
+      final groupSize = tester.getSize(find.byType(GroupCard).first);
+
+      // المستوى الثاني: خدمات المنطقة المختارة
+      await tester.tap(find.text('الشيخ نجار'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(MiniServiceCard), findsNWidgets(2));
+      final svcSize = tester.getSize(find.byType(MiniServiceCard).first);
+
+      expect(svcSize.width, groupSize.width,
+          reason: 'عرض البطاقتين واحد — نفس الشبكة بثلاثة أعمدة');
+      expect(svcSize.height, groupSize.height,
+          reason: 'ارتفاع البطاقتين واحد — نفس الإيقاع الرأسي');
+    });
+
+    testWidgets('اسم المنطقة يبقى مقروءاً داخل البطاقة', (tester) async {
+      await open(tester);
+      expect(find.text('الشيخ نجار'), findsOneWidget);
+      expect(find.text('الهجانة'), findsOneWidget);
+      // والعنوان من الفلتر المُسنَد، لا نصّاً مضمَّناً في التطبيق
+      expect(find.text('المناطق'), findsOneWidget);
     });
   });
 }

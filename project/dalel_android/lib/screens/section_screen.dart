@@ -288,21 +288,29 @@ class _SectionScreenState extends State<SectionScreen> {
 
   /// أيقونة بطاقة المجموعة — من أيقونة الفلتر الذي اختارها المدير،
   /// وإلا فنوع المصدر (مناطق · اختصاص · مركبات).
-  Widget _groupIcon(_Group g, {bool selected = false}) {
-    final c = selected ? Colors.white : AppTheme.textSecondary;
+  /// أيقونة بطاقة التجميع — `size` ١٥ في ترويسة الشبكة و٢١ داخل البطاقة
+  /// (مطابقة لأيقونة بطاقة الخدمة المصغّرة)، و`onCard` تجعل اللون أزرق
+  /// داخل مربّع فاتح بدل الرصاصي.
+  Widget _groupIcon(_Group g,
+      {bool selected = false, double size = 15, bool onCard = false}) {
+    final c = selected
+        ? Colors.white
+        : onCard
+            ? AppTheme.primary
+            : AppTheme.textSecondary;
     final f = _primaryFilter;
     if (f != null && f.icon.isNotEmpty) {
-      return Icon(AppIcons.get(f.icon), size: 15, color: c);
+      return Icon(AppIcons.get(f.icon), size: size, color: c);
     }
     final kind = f?.sourceType ?? _info.groupBy;
     switch (kind) {
       case 'specialty':
-        return Icon(LucideIcons.stethoscope, size: 15, color: c);
+        return Icon(LucideIcons.stethoscope, size: size, color: c);
       case 'field':
       case 'meta':
-        return _vehicleIcon(g.label, selected: selected);
+        return _vehicleIcon(g.label, size: size, color: c);
       default:
-        return Icon(LucideIcons.mapPin, size: 15, color: c);
+        return Icon(LucideIcons.mapPin, size: size, color: c);
     }
   }
 
@@ -824,18 +832,30 @@ class _SectionScreenState extends State<SectionScreen> {
               ],
             ),
           ),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: groups.map((g) {
+          /* شبكة بثلاثة أعمدة — نفس هندسة شبكة بطاقات الخدمة أدناه
+             (٣ أعمدة · فاصل ٨ · نسبة ٠٫٨٦)، فتصطفّ بطاقات المناطق مع
+             بطاقات الخدمة تماماً بدل صفوف الشرائح المتفاوتة العرض. */
+          GridView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 3,
+              crossAxisSpacing: 8,
+              mainAxisSpacing: 8,
+              childAspectRatio: 0.86,
+            ),
+            itemCount: groups.length,
+            itemBuilder: (context, i) {
+              final g = groups[i];
               return GroupCard(
                 title: g.label,
                 count: g.count,
+                open: g.open,
                 selected: false,
-                icon: _groupIcon(g),
+                icon: _groupIcon(g, size: 21, onCard: true),
                 onTap: () => _selectGroup(g.key),
               );
-            }).toList(),
+            },
           ),
           const SizedBox(height: 22),
         ],
@@ -1005,19 +1025,20 @@ class _SectionScreenState extends State<SectionScreen> {
   }
 
 
-  static Widget _vehicleIcon(String label, {bool selected = false}) {
+  static Widget _vehicleIcon(String label,
+      {bool selected = false, double size = 15, Color? color}) {
     final l = label.toLowerCase();
-    final c = selected ? Colors.white : AppTheme.textSecondary;
+    final c = color ?? (selected ? Colors.white : AppTheme.textSecondary);
     if (l.contains('إسعاف') || l.contains('اسعاف') || l.contains('ambulance')) {
-      return AmbulanceIcon(size: 15, color: c);
+      return AmbulanceIcon(size: size, color: c);
     }
     if (l.contains('باص') || l.contains('حافلة'))
-      return Icon(LucideIcons.bus, size: 15, color: c);
+      return Icon(LucideIcons.bus, size: size, color: c);
     if (l.contains('سرفيس') || l.contains('تكسي'))
-      return Icon(LucideIcons.car, size: 15, color: c);
+      return Icon(LucideIcons.car, size: size, color: c);
     if (l.contains('شحن') || l.contains('نقل'))
-      return Icon(LucideIcons.truck, size: 15, color: c);
-    return Icon(LucideIcons.car, size: 15, color: c);
+      return Icon(LucideIcons.truck, size: size, color: c);
+    return Icon(LucideIcons.car, size: size, color: c);
   }
 
   // ═══════════════ الاتصال ═══════════════
