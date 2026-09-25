@@ -121,7 +121,9 @@ function ServicesTab() {
   const toast = useToast()
 
   const load = useCallback(async () => {
-    const r = await api.admin.services({ q, limit: 200 })
+    /* بلا حدّ أقصى: يُعرض كل الخدمات — كان الطلب يمرّر limit: 200 والخادم
+       يحدّ بـ٤٠٠، فتختفي الخدمات الأقدم عن المدير بلا ترشيح. */
+    const r = await api.admin.services({ q })
     setItems(r.items)
   }, [q])
 

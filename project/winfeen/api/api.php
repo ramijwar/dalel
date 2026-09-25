@@ -1630,7 +1630,10 @@ function admin_services_list(): void
         $where[] = '(s.name LIKE ? OR s.address LIKE ? OR s.phone LIKE ?)';
         array_push($args, "%$q%", "%$q%", "%$q%");
     }
-    $sql = base_select() . " WHERE " . implode(' AND ', $where) . " ORDER BY s.id DESC LIMIT 400";
+    /* بلا حدّ أقصى: تُعرض كل الخدمات المطابقة.
+       كان الحدّ ٤٠٠ فتختفي كل خدمة تتجاوزه بلا ترشيح (٤ صيدليات مع ٤٠٤ خدمة)،
+       والمدير لا يراها فلا يستطيع تعديلها ولا حذفها. */
+    $sql = base_select() . " WHERE " . implode(' AND ', $where) . " ORDER BY s.id DESC";
     $st = db()->prepare($sql);
     $st->execute($args);
     $rows = $st->fetchAll();
