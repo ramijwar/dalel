@@ -7,6 +7,10 @@ import AdCarousel from '../components/AdCarousel'
 
 /**
  * الصفحة الرئيسية.
+ * البنية: شريط الإعلانات ← شريط الإحصاءات ← **بطاقات الأقسام** (وهي روابط
+ * الأقسام نفسها: أيقونة + عدد الخدمات + الاسم)، ويعقبها شريط التحديث.
+ * قائمة «تصفّح الأقسام» أُزيلت: كانت تكراراً للبطاقات نفسها بعناوين ووصف
+ * فتُضاعف طول الصفحة بلا فائدة.
  * كل البيانات (الأقسام + العدّادات + الإعدادات) تأتي من طلب واحد هو /api/meta
  * يُنجزه المخزن مرة واحدة عند بدء التطبيق — لذلك لا يوجد هنا أي جلب أو حالة
  * تحميل أو خطأ: إن ظهرت الأقسام فالعدّادات معها تلقائياً.
@@ -64,29 +68,6 @@ export default function Home() {
             <span className="counter__label">{c.name}</span>
           </Link>
         ))}
-      </section>
-
-      <section className="home__cats" aria-label="الأقسام">
-        <h2 className="home__cats-title">تصفّح الأقسام</h2>
-        <div className="cat-grid">
-          {categories.map((c) => (
-            <Link
-              key={c.id}
-              to={c.route || `/${c.slug}`}
-              className="cat-card"
-              style={{ '--cat-color': c.color } as React.CSSProperties}
-            >
-              <span className="cat-card__icon"><CatIcon icon={c.icon} size={28} /></span>
-              <div className="cat-card__text">
-                <h3>{c.name}</h3>
-                <p>{c.description}</p>
-              </div>
-              <span className="cat-card__arrow">
-                <Icon name="arrowLeft" size={18} />
-              </span>
-            </Link>
-          ))}
-        </div>
       </section>
     </main>
   )
