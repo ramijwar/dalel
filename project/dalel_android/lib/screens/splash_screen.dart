@@ -1,9 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import '../config/theme.dart';
 import '../providers/app_provider.dart';
 import '../providers/auth_provider.dart';
+import '../services/update_service.dart';
 import 'main_shell.dart';
 
 /// شاشة البداية — تحضّر قاعدة البيانات المحلية والجلسة
@@ -47,6 +50,9 @@ class _SplashScreenState extends State<SplashScreen>
     // ٢) حمّل البيانات (من المحلي فوراً، ثم الشبكة)
     if (mounted) setState(() => _status = 'تحميل البيانات…');
     await app.init();
+
+    // ٣) افحص التحديث في الخلفية — لا يؤخّر الإقلاع ولا يُفشله
+    unawaited(UpdateService.instance.check(silent: true));
 
     if (!mounted) return;
     await Future.delayed(const Duration(milliseconds: 350));

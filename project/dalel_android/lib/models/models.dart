@@ -938,6 +938,105 @@ class Announcement {
 }
 
 // ═══════════════ الإعدادات ═══════════════
+// ═══════════════ تحديث التطبيق ═══════════════
+
+/// حجم مقروء: «٢٤٫٣ ميغا» · «٧٢ ك.ب»
+String formatBytes(num bytes) {
+  if (bytes <= 0) return '—';
+  if (bytes >= 1073741824) {
+    return '${(bytes / 1073741824).toStringAsFixed(2)} غيغا';
+  }
+  if (bytes >= 1048576) {
+    return '${(bytes / 1048576).toStringAsFixed(1)} ميغا';
+  }
+  if (bytes >= 1024) return '${(bytes / 1024).round()} ك.ب';
+  return '${bytes.round()} بايت';
+}
+
+/// سرعة التنزيل: «٢٫٤ م.ب/ث»
+String formatSpeed(num bytesPerSecond) {
+  if (bytesPerSecond <= 0) return '—';
+  if (bytesPerSecond >= 1048576) {
+    return '${(bytesPerSecond / 1048576).toStringAsFixed(1)} م.ب/ث';
+  }
+  if (bytesPerSecond >= 1024) {
+    return '${(bytesPerSecond / 1024).round()} ك.ب/ث';
+  }
+  return '${bytesPerSecond.round()} بايت/ث';
+}
+
+/// الزمن المتبقّي: «٤٥ ث» · «٢:٠٥ د» — يفرغ إن كان غير منطقي
+String formatEta(int seconds) {
+  if (seconds <= 0 || seconds > 7200) return '';
+  final m = seconds ~/ 60;
+  final sec = seconds % 60;
+  if (m == 0) return '$sec ث';
+  return '$m:${sec.toString().padLeft(2, '0')} د';
+}
+
+/// إصدار أحدث من التطبيق — يأتي من `GET /api/app-update`
+class AppUpdate {
+  final String versionName;
+  final int versionCode;
+  final String notes;
+  final bool force;
+  final int size;
+  final String sha256;
+  final String url;
+  final DateTime? publishedAt;
+
+  AppUpdate({
+    this.versionName = '',
+    this.versionCode = 0,
+    this.notes = '',
+    this.force = false,
+    this.size = 0,
+    this.sha256 = '',
+    this.url = '',
+    this.publishedAt,
+  });
+
+  factory AppUpdate.fromJson(Map<String, dynamic> j) => AppUpdate(
+        versionName: _s(j['version_name']),
+        versionCode: _i(j['version_code']),
+        notes: _s(j['notes']),
+        force: _b(j['force']),
+        size: _i(j['size']),
+        sha256: _s(j['sha256']),
+        url: _s(j['url']),
+        publishedAt: DateTime.tryParse(_s(j['published_at'])),
+      );
+
+  /// سطور «ما الجديد» — بلا فراغات ولا شرطات في البداية
+  List<String> get noteLines => notes
+      .split('\n')
+      .map((l) => l.trim().replaceFirst(RegExp(r'^[-•*·]\s*'), ''))
+      .where((l) => l.isNotEmpty)
+      .toList();
+
+  bool get hasUrl => url.trim().isNotEmpty;
+  bool get hasNotes => noteLines.isNotEmpty;
+  String get sizeLabel => formatBytes(size);
+
+  /// هل هذا الإصدار أحدث من المثبَّت على الجهاز؟
+  /// المعيار: رقم البناء (versionCode). وإن تعذّر قراءته (0) نقارن الاسم.
+  /// عند تعذّر القراءة لا نعرض تحديثاً وهمياً إن كان الاسم نفسه.
+  bool isNewerThan({required int installedCode, required String installedName}) {
+    if (versionCode > 0 && installedCode > 0) {
+      return versionCode > installedCode;
+    }
+    if (versionName.isEmpty) return false;
+    return versionName != installedName;
+  }
+
+  /// تاريخ النشر بصيغة مختصرة
+  String get publishedLabel {
+    final d = publishedAt;
+    if (d == null) return '';
+    return '${d.day}/${d.month}/${d.year}';
+  }
+}
+
 class AppSettings {
   final String siteName;
   final String city;

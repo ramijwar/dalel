@@ -5,6 +5,9 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
     <!-- الاتصال الهاتفي: زر الاتصال بالخدمة -->
     <uses-permission android:name="android.permission.CALL_PHONE"/>
+    <!-- تثبيت تحديث التطبيق من داخل التطبيق (أندرويد 8+).
+         لا يمنح هذا الإذن تثبيتاً صامتاً — يظهر مثبّت النظام دائماً. -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES"/>
 
     <application
         android:label="دليل الدير"
@@ -60,6 +63,15 @@
         <intent>
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>
+        </intent>
+        <!-- مثبّت النظام: لفتح ملف APK المُنزَّل (أندرويد 11+ يحتاج تصريحاً صريحاً) -->
+        <intent>
+            <action android:name="android.intent.action.VIEW"/>
+            <data android:mimeType="application/vnd.android.package-archive"/>
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.INSTALL_PACKAGE"/>
+            <data android:scheme="content"/>
         </intent>
     </queries>
 </manifest>

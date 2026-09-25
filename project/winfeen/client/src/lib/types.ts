@@ -300,6 +300,42 @@ export interface Settings {
   service_types?: unknown[]
 }
 
+export interface ApkFile {
+  name: string
+  size: number
+  size_h: string
+  modified: string
+  current: boolean
+}
+
+/** حالة تحديث تطبيق أندرويد — كما يراها التطبيق ولوحة التحكم */
+export interface AppUpdateInfo {
+  version_name: string
+  version_code: number
+  notes: string
+  force: boolean
+  size: number
+  sha256: string
+  /** الملف المنشور داخل مجلد apk/ */
+  apk_file?: string
+  /** رابط خارجي بديل (GitHub/Drive) إن استُعمل */
+  url?: string
+  has_file: boolean
+  available?: boolean
+  published_at?: string | null
+  uploaded_at?: number
+  /** حقول إدارية */
+  download_url?: string
+  dir?: string
+  dir_writable?: boolean
+  upload_limit?: number
+  upload_limit_h?: string
+  max_upload?: string
+  post_max?: string
+  file_size_h?: string
+  apks_in_dir?: ApkFile[]
+}
+
 export interface MetaResponse {
   categories: Category[]
   regions: Region[]

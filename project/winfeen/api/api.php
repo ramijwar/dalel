@@ -9,6 +9,7 @@ require __DIR__ . '/includes/token.php';
 require __DIR__ . '/includes/auth.php';
 require __DIR__ . '/includes/helpers.php';
 require __DIR__ . '/includes/fields.php';
+require __DIR__ . '/includes/app_update.php';
 
 date_default_timezone_set(APP_TIMEZONE);
 
@@ -91,6 +92,10 @@ function route(): void
         if (ctype_digit($s[1])) { api_service_detail((int) $s[1]); return; }
     }
     if ($r0 === 'service-requests' && $m === 'POST') { api_create_request(); return; }
+
+    // ---------- تحديث تطبيق أندرويد (عامة) ----------
+    // يقرأها التطبيق عند كل تشغيل ليعرف إن كان هناك إصدار أحدث
+    if ($r0 === 'app-update' && $m === 'GET') { api_app_update(); return; }
 
     // ---------- المصادقة ----------
     if ($r0 === 'auth') {
@@ -213,6 +218,21 @@ function route(): void
         }
         if ($a === 'activity' && $m === 'GET')  { admin_activity(); return; }
         if ($a === 'settings' && $m === 'PUT')  { admin_settings_save(); return; }
+
+        // ─── تحديث تطبيق أندرويد ───
+        // GET    /admin/app-update          حالة كاملة
+        // PUT    /admin/app-update          حفظ الإصدار/الملاحظات/الإلزامي/الرابط
+        // POST   /admin/app-update/apk      رفع ملف APK (multipart: apk)
+        // POST   /admin/app-update/scan     فحص مجلد apk/ وربط أحدث ملف
+        // DELETE /admin/app-update/apk      إزالة الملف المنشور
+        if ($a === 'app-update') {
+            $sub = $s[2] ?? '';
+            if ($sub === 'apk' && $m === 'POST')   { admin_app_update_upload(); return; }
+            if ($sub === 'apk' && $m === 'DELETE') { admin_app_update_delete(); return; }
+            if ($sub === 'scan' && $m === 'POST')  { admin_app_update_scan(); return; }
+            if ($sub === '' && $m === 'GET')       { admin_app_update_get(); return; }
+            if ($sub === '' && ($m === 'PUT' || $m === 'PATCH')) { admin_app_update_save(); return; }
+        }
         if ($a === 'data' && $m === 'GET')      { admin_data_counts(); return; }
         if ($a === 'data' && $m === 'DELETE')   { admin_data_clear(); return; }
     }

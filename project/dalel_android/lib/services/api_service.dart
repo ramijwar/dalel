@@ -132,6 +132,24 @@ class ApiService {
     }
   }
 
+  /// هل هناك إصدار أحدث من التطبيق؟
+  /// نقطة عامة خفيفة (GET /api/app-update) تُقرأ عند كل تشغيل.
+  /// تُرجع null إن لم يكن هناك تحديث منشور أو تعذّرت القراءة.
+  Future<AppUpdate?> appUpdate() async {
+    try {
+      final r = await get('app-update');
+      if (r is! Map) return null;
+      final u = r['update'];
+      if (u is! Map) return null;
+      final parsed = AppUpdate.fromJson(Map<String, dynamic>.from(u));
+      // الخادم يحسم الجاهزية: لا ملف ولا رابط = لا تحديث
+      if (u['available'] == false) return null;
+      return parsed.hasUrl ? parsed : null;
+    } catch (_) {
+      return null; // التحديث ليس أمراً حرجاً — لا نُفشل التطبيق بسببه
+    }
+  }
+
   /// كل البيانات المرجعية دفعةً واحدة (أقسام · مناطق · محافظات · إعدادات)
   Future<MetaBundle> meta() async {
     final r = await get('meta');

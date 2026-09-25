@@ -399,7 +399,12 @@ function log_activity(string $action, string $entity = '', ?int $entityId = null
     }
 }
 
-function setting(string $key, ?string $default = null): ?string
+/**
+ * ذاكرة الإعدادات المؤقتة — مشتركة بين القراءة والكتابة.
+ * تُعلن بالمرجع (by reference) كي يتمكّن set_setting من تحديثها، وإلا
+ * قرأ بقية الطلب نفسه القيمة القديمة بعد الحفظ مباشرةً.
+ */
+function &setting_cache(): array
 {
     static $cache = null;
     if ($cache === null) {
@@ -408,6 +413,12 @@ function setting(string $key, ?string $default = null): ?string
             $cache[$row['key']] = $row['value'];
         }
     }
+    return $cache;
+}
+
+function setting(string $key, ?string $default = null): ?string
+{
+    $cache = &setting_cache();
     return $cache[$key] ?? $default;
 }
 
@@ -415,4 +426,8 @@ function set_setting(string $key, string $value): void
 {
     $st = db()->prepare("INSERT INTO settings (key, value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value = excluded.value");
     $st->execute([$key, $value]);
+
+    // حدّث الذاكرة فوراً — كي ترى بقية الطلب القيمة الجديدة
+    $cache = &setting_cache();
+    $cache[$key] = $value;
 }

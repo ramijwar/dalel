@@ -2,7 +2,7 @@ import type {
   Governorate,
   AdminStats, ActivityItem, Category, MetaResponse, Region, Service,
   ServiceListResponse, ServiceRequest, Settings, User, ScheduleRow, Specialty,
-  CategoryField, FieldOption, Filter, FilterSourceOption,
+  CategoryField, FieldOption, Filter, FilterSourceOption, AppUpdateInfo,
 } from './types'
 import { getBasePath } from './basePath'
 
@@ -93,6 +93,8 @@ export const api = {
   service: (id: number) => request<{ service: Service; nearby: Service[] }>(`/services/${id}`),
   /** الاختصاصات الطبية من قاعدة البيانات */
   specialties: () => request<{ ok: true; items: Specialty[] }>('/specialties'),
+  /** هل هناك إصدار أحدث من تطبيق أندرويد؟ (يراه التطبيق أيضاً) */
+  appUpdate: () => request<{ update: AppUpdateInfo }>('/app-update'),
   createRequest: (payload: Record<string, any>) =>
     request<{ id: number; message: string }>('/service-requests', { method: 'POST', body: payload }),
 
@@ -193,6 +195,46 @@ export const api = {
     dataCounts: () => request<{ counts: Record<string, number> }>('/admin/data'),
     clearData: (targets: string[], confirm: string) =>
       request<{ message: string; deleted: Record<string, number> }>('/admin/data', { method: 'DELETE', body: { targets, confirm } }),
+
+    // ─── تحديث تطبيق أندرويد ───
+    appUpdate: () => request<{ update: AppUpdateInfo }>('/admin/app-update'),
+    saveAppUpdate: (payload: Record<string, any>) =>
+      request<{ message: string; update: AppUpdateInfo }>('/admin/app-update', { method: 'PUT', body: payload }),
+    /** فحص مجلد apk/ — يُمرَّر file لربط ملف بعينه، أو force لأخذ الأحدث دوماً */
+    scanAppUpdate: (opts: { file?: string; force?: boolean } = {}) =>
+      request<{ message: string; changed: boolean; detected: boolean; meta: any; update: AppUpdateInfo }>(
+        '/admin/app-update/scan', { method: 'POST', body: opts }),
+    deleteAppApk: () =>
+      request<{ message: string; update: AppUpdateInfo }>('/admin/app-update/apk', { method: 'DELETE' }),
+    /**
+     * رفع ملف APK مع نسبة التقدّم.
+     * نستعمل XMLHttpRequest لا fetch: fetch لا يعطي تقدّم الرفع.
+     */
+    uploadAppApk: (
+      file: File,
+      onProgress?: (percent: number, loaded: number, total: number) => void,
+    ) => new Promise<{ message: string; detected: boolean; meta: any; update: AppUpdateInfo }>((resolve, reject) => {
+      const fd = new FormData()
+      fd.append('apk', file)
+      const xhr = new XMLHttpRequest()
+      xhr.open('POST', `${getBasePath()}/api/admin/app-update/apk`)
+      const token = getToken()
+      if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`)
+      xhr.upload.onprogress = (e) => {
+        if (e.lengthComputable && onProgress) {
+          onProgress(Math.min(100, Math.round((e.loaded / e.total) * 100)), e.loaded, e.total)
+        }
+      }
+      xhr.onload = () => {
+        let data: any = null
+        try { data = JSON.parse(xhr.responseText) } catch { data = null }
+        if (xhr.status >= 200 && xhr.status < 300 && data && data.ok !== false) resolve(data)
+        else reject(new ApiError(data?.message || `فشل الرفع (${xhr.status})`, xhr.status))
+      }
+      xhr.onerror = () => reject(new ApiError('انقطع الاتصال أثناء الرفع', 0))
+      xhr.onabort = () => reject(new ApiError('أُلغي الرفع', 0))
+      xhr.send(fd)
+    }),
   },
 }
 

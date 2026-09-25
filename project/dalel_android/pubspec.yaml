@@ -1,7 +1,7 @@
 name: dalel
 description: وين في؟ — دليل الخدمات اليومية (تطبيق أندرويد مطابق لموقع الدليل)
 publish_to: 'none'
-version: 1.1.0+2
+version: 1.2.0+3
 
 environment:
   sdk: '>=3.4.0 <4.0.0'
@@ -31,6 +31,12 @@ dependencies:
   cached_network_image: ^3.3.1
   shimmer: ^3.0.0
   flutter_staggered_animations: ^1.1.1
+
+  # تحديث التطبيق من داخل التطبيق
+  package_info_plus: ^8.0.2   # قراءة رقم الإصدار المثبَّت
+  path_provider: ^2.1.4       # مجلد تنزيل الملف
+  open_filex: ^4.5.0          # فتح مثبّت أندرويد على الملف
+  crypto: ^3.0.5              # التحقق من بصمة الملف المُنزَّل
 
   # أدوات
   url_launcher: ^6.3.0

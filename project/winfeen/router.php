@@ -49,6 +49,10 @@ if (preg_match('#/api(/|$)#', $rawUri)) {
     $_SERVER['REQUEST_URI'] = '/api' . $apiPath;
     $_SERVER['SCRIPT_NAME'] = '/router.php';
 
+    // احفظ مسار المجلد الأصلي (/daleltest مثلاً) قبل أن نطمسه:
+    // تحتاجه واجهة الـAPI لبناء روابط مطلقة صحيحة (رابط تنزيل ملف APK).
+    $_SERVER['WF_BASE_PATH'] = $basePath;
+
     require $root . '/api/api.php';
     return true;
 }
@@ -91,6 +95,7 @@ if ($uriPath !== '/' && is_file($file)) {
         'woff2'=> 'font/woff2',
         'map'  => 'application/json',
         'txt'  => 'text/plain; charset=utf-8',
+        'apk'  => 'application/vnd.android.package-archive',
     ];
     header('Content-Type: ' . ($types[$ext] ?? 'application/octet-stream'));
     header('Cache-Control: public, max-age=31536000');

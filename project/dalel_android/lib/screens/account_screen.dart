@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:lucide_icons/lucide_icons.dart';
@@ -8,6 +10,8 @@ import '../providers/app_provider.dart';
 import '../providers/auth_provider.dart';
 import '../services/api_service.dart';
 import '../services/database_service.dart';
+import '../services/update_service.dart';
+import '../widgets/update_card.dart';
 import '../widgets/widgets.dart';
 import 'login_screen.dart';
 import 'owner_dashboard_screen.dart';
@@ -31,6 +35,15 @@ class _AccountScreenState extends State<AccountScreen> {
   void initState() {
     super.initState();
     _loadFavorites();
+    // اسأل عن تحديث (بصمت) — عند وجود إلزامي تظهر نافذة لا تُغلق
+    unawaited(_checkUpdate());
+  }
+
+  Future<void> _checkUpdate() async {
+    final svc = UpdateService.instance;
+    await svc.check(silent: true);
+    if (!mounted) return;
+    await ForceUpdateDialog.maybeShow(context);
   }
 
   Future<void> _loadFavorites() async {
@@ -53,13 +66,20 @@ class _AccountScreenState extends State<AccountScreen> {
     return Scaffold(
       backgroundColor: AppTheme.background,
       body: RefreshIndicator(
-        onRefresh: () async => _loadFavorites(),
+        onRefresh: () async {
+          await _loadFavorites();
+          await UpdateService.instance.check(silent: true);
+        },
         child: SingleChildScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
           child: Column(
             children: [
               // ─── رأس الحساب ───
               _buildHeader(auth.user!),
+
+              // ─── تحديث التطبيق (إن وُجد إصدار أحدث) ───
+              const _UpdateSlot(),
+
               const SizedBox(height: 14),
 
               // ─── الإجراءات السريعة ───
@@ -155,6 +175,9 @@ class _AccountScreenState extends State<AccountScreen> {
                 ),
               ),
               const SizedBox(height: 22),
+
+              // تحديث التطبيق — يهمّ الزائر أيضاً
+              const _UpdateSlot(),
 
               // محفوظات الزائر
               if (_favorites.isNotEmpty) ...[
@@ -463,6 +486,25 @@ class _AccountScreenState extends State<AccountScreen> {
       ),
     );
     if (ok == true && mounted) await auth.logout();
+  }
+}
+
+/// تُضيف الهوامش المناسبة لبطاقة التحديث في السياقين (مسجَّل/زائر)
+class _UpdateSlot extends StatelessWidget {
+  const _UpdateSlot();
+
+  @override
+  Widget build(BuildContext context) {
+    final s = UpdateService.instance;
+    return AnimatedBuilder(
+      animation: s,
+      builder: (context, _) => s.hasUpdate
+          ? const Padding(
+              padding: EdgeInsets.only(top: 14),
+              child: UpdateCard(),
+            )
+          : const SizedBox.shrink(),
+    );
   }
 }
 

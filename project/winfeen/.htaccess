@@ -27,6 +27,11 @@
   # ٤. الملفات المخفية (مثل secret.key و .git) عدا .well-known
   RewriteRule (^|/)\.(?!well-known) - [F,L]
 
+  # ٥. ملفات APK تُخدَم بنوعها الصحيح (ليعرفها أندرويد كحزمة تثبيت)
+  <IfModule mod_mime.c>
+    AddType application/vnd.android.package-archive .apk
+  </IfModule>
+
   # ══════════════════════════════════════════════════════════════════
 
   # 0. المسار الجذري للتطبيق → router.php

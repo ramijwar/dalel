@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useStore } from '../../lib/store'
 import { api } from '../../lib/api'
-import type { AdminStats, ActivityItem, Category, CategoryField, Filter, FilterSourceOption, Governorate, Region, Service, ServiceRequest, User, Zone } from '../../lib/types'
+import type { AdminStats, ActivityItem, AppUpdateInfo, Category, CategoryField, Filter, FilterSourceOption, Governorate, Region, Service, ServiceRequest, User, Zone } from '../../lib/types'
 import { useToast } from '../../lib/useToast'
 import { num, fmtDateTime, fmtDate } from '../../lib/utils'
 import Icon from '../../components/Icon'
@@ -14,7 +14,7 @@ import DangerZone from '../../components/DangerZone'
 import ScheduleEditor from '../../components/ScheduleEditor'
 import { FieldsBuilder, DynamicFields, toDraft, type DraftField, type FieldValues } from '../../components/CategoryFields'
 
-type Tab = 'overview' | 'services' | 'categories' | 'filters' | 'governorates' | 'regions' | 'requests' | 'users' | 'settings' | 'activity'
+type Tab = 'overview' | 'services' | 'categories' | 'filters' | 'governorates' | 'regions' | 'requests' | 'users' | 'app' | 'settings' | 'activity'
 
 export default function AdminDashboard() {
   const { user } = useStore()
@@ -32,6 +32,7 @@ export default function AdminDashboard() {
     { id: 'regions',    icon: 'map-pin',       label: 'المناطق' },
     { id: 'requests',   icon: 'inbox',         label: 'الطلبات' },
     { id: 'users',      icon: 'users',         label: 'المستخدمون' },
+    { id: 'app',        icon: 'package',       label: 'تحديث التطبيق' },
     { id: 'settings',   icon: 'settings',      label: 'الإعدادات' },
     { id: 'activity',   icon: 'activity',      label: 'النشاط' },
   ]
@@ -60,6 +61,7 @@ export default function AdminDashboard() {
         {tab === 'regions' && <RegionsTab />}
         {tab === 'requests' && <RequestsTab />}
         {tab === 'users' && <UsersTab />}
+        {tab === 'app' && <AppUpdateTab />}
         {tab === 'settings' && <SettingsTab />}
         {tab === 'activity' && <ActivityTab />}
       </div>
@@ -1366,6 +1368,267 @@ function UserEditForm({ u, onSaved }: { u: User | null; onSaved: () => void }) {
       </label>
       <button className="btn btn--primary" disabled={busy} type="submit">{busy ? 'جاري الحفظ…' : 'حفظ التغييرات'}</button>
     </form>
+  )
+}
+
+/**
+ * تبويب «تحديث التطبيق»
+ * ============================================================
+ * المدير هنا:
+ *   ١. يرفع ملف APK  → يقرأ الخادم الإصدار من داخل الملف وينشره
+ *   ٢. أو يضع الملف في مجلد apk/ ويضغط «فحص المجلد»
+ *   ٣. أو يلصق رابطاً خارجياً (GitHub / Drive)
+ * فتعرض تطبيقات أندرويد بطاقة التحديث في تبويب «حسابي».
+ */
+function AppUpdateTab() {
+  const toast = useToast()
+  const [info, setInfo] = useState<AppUpdateInfo | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [busy, setBusy] = useState(false)
+
+  const [versionName, setVersionName] = useState('')
+  const [versionCode, setVersionCode] = useState('')
+  const [notes, setNotes] = useState('')
+  const [force, setForce] = useState(false)
+  const [url, setUrl] = useState('')
+
+  const [file, setFile] = useState<File | null>(null)
+  const [percent, setPercent] = useState(0)
+  const [uploading, setUploading] = useState(false)
+
+  const load = useCallback(async () => {
+    try {
+      const r = await api.admin.appUpdate()
+      setInfo(r.update)
+      setVersionName(r.update.version_name)
+      setVersionCode(String(r.update.version_code || ''))
+      setNotes(r.update.notes)
+      setForce(!!r.update.force)
+      setUrl(r.update.url ?? '')
+    } catch {
+      toast('تعذّر تحميل حالة التحديث', 'error')
+    }
+    setLoading(false)
+  }, [toast])
+
+  useEffect(() => { load() }, [load])
+
+  const applyResult = (u: AppUpdateInfo) => {
+    setInfo(u)
+    setVersionName(u.version_name)
+    setVersionCode(String(u.version_code || ''))
+    setNotes(u.notes)
+    setForce(!!u.force)
+    setUrl(u.url ?? '')
+  }
+
+  const save = async (e: React.FormEvent) => {
+    e.preventDefault(); setBusy(true)
+    try {
+      const r = await api.admin.saveAppUpdate({
+        version_name: versionName,
+        version_code: Number(versionCode) || 0,
+        notes, force, url,
+      })
+      applyResult(r.update)
+      toast(r.message)
+    } catch (err: any) { toast(err?.message || 'فشل الحفظ', 'error') }
+    setBusy(false)
+  }
+
+  const upload = async () => {
+    if (!file) return
+    setUploading(true); setPercent(0)
+    try {
+      const r = await api.admin.uploadAppApk(file, (p) => setPercent(p))
+      applyResult(r.update)
+      setFile(null)
+      toast(r.message + (r.detected ? ' ✅' : ' ⚠️'))
+    } catch (err: any) { toast(err?.message || 'فشل الرفع', 'error') }
+    setUploading(false)
+  }
+
+  const scan = async (name?: string) => {
+    setBusy(true)
+    try {
+      const r = await api.admin.scanAppUpdate(name ? { file: name } : { force: true })
+      applyResult(r.update)
+      toast(r.message)
+    } catch (err: any) { toast(err?.message || 'تعذّر الفحص', 'error') }
+    setBusy(false)
+  }
+
+  const removeApk = async () => {
+    if (!confirm('حذف الملف المنشور؟ لن يظهر أي تحديث للتطبيقات بعد ذلك.')) return
+    setBusy(true)
+    try {
+      const r = await api.admin.deleteAppApk()
+      applyResult(r.update)
+      toast(r.message)
+    } catch (err: any) { toast(err?.message || 'فشل الحذف', 'error') }
+    setBusy(false)
+  }
+
+  if (loading) return <div className="empty-state"><p>جارٍ التحميل…</p></div>
+  if (!info) return <div className="empty-state"><p>تعذّر تحميل البيانات</p></div>
+
+  const limit = info.upload_limit ?? 0
+  const fileTooBig = !!file && limit > 0 && file.size > limit
+  const published = info.has_file || (url !== '') || (info.version_code > 0)
+
+  return (
+    <div className="appup">
+      {/* ─── الحالة الحالية ─── */}
+      <div className={`appup__status${published ? ' is-live' : ''}`}>
+        <div className="appup__status-head">
+          <span className="appup__badge"><Icon name="package" size={16} /></span>
+          <div>
+            <strong>{published ? `الإصدار المنشور ${info.version_name || '—'}` : 'لا يوجد تحديث منشور'}</strong>
+            <p className="appup__sub">
+              {published
+                ? `كود البناء ${info.version_code} · ${info.file_size_h || '—'} · ${info.has_file ? info.apk_file : 'رابط خارجي'}`
+                : 'التطبيقات المثبَّتة لن تعرض أي تنبيه تحديث.'}
+            </p>
+          </div>
+          {info.force && <span className="appup__pill appup__pill--force">إلزامي</span>}
+          {published && !info.force && <span className="appup__pill">اختياري</span>}
+        </div>
+
+        {info.published_at && (
+          <p className="appup__sub">نُشر: {fmtDateTime(info.published_at)}</p>
+        )}
+        {info.sha256 && (
+          <p className="appup__sha" dir="ltr">SHA-256: {info.sha256.slice(0, 16)}…</p>
+        )}
+        {info.download_url && (
+          <a className="appup__link" href={info.download_url} target="_blank" rel="noreferrer" dir="ltr">
+            {info.download_url}
+          </a>
+        )}
+
+        {(info.dir_writable === false || !info.has_file) && (
+          <p className="appup__note">
+            <Icon name="info" size={14} /> ضع الملف في مجلد <code dir="ltr">{info.dir}</code> عبر FTP
+            ثم اضغط «فحص المجلد» — أو ارفعه من هنا مباشرةً.
+          </p>
+        )}
+      </div>
+
+      {/* ─── رفع الملف ─── */}
+      <section className="admin-form__section appup__box">
+        <h4><Icon name="upload" size={16} /> رفع ملف APK</h4>
+        <input
+          type="file"
+          accept=".apk,application/vnd.android.package-archive"
+          onChange={(e) => { setFile(e.target.files?.[0] ?? null); setPercent(0) }}
+        />
+        <p className="admin-form__hint">
+          الحد الأقصى للرفع على الخادم: <strong>{info.upload_limit_h || '—'}</strong>
+          {' '}(<code dir="ltr">upload_max_filesize={info.max_upload} · post_max_size={info.post_max}</code>).
+          إن كان ملفك أكبر، ارفعه بـ FTP إلى مجلد <code dir="ltr">{info.dir}</code> ثم اضغط «فحص المجلد».
+        </p>
+
+        {file && (
+          <p className="appup__file">
+            <Icon name="package" size={14} /> {file.name}
+            <span className="appup__sub"> {(file.size / 1048576).toFixed(2)} ميغا</span>
+          </p>
+        )}
+
+        {fileTooBig && (
+          <p className="admin-form__err">
+            الملف أكبر من حدّ الرفع ({info.upload_limit_h}) — استعمل FTP ثم «فحص المجلد».
+          </p>
+        )}
+
+        {uploading && (
+          <div className="appup__progress">
+            <div className="appup__bar"><span style={{ width: `${percent}%` }} /></div>
+            <span className="appup__pct">{percent}%</span>
+          </div>
+        )}
+
+        <div className="appup__actions">
+          <button type="button" className="btn btn--primary" disabled={!file || uploading || fileTooBig} onClick={upload}>
+            <Icon name="upload" size={15} /> {uploading ? 'جارٍ الرفع…' : 'رفع ونشر'}
+          </button>
+          <button type="button" className="btn btn--secondary" disabled={busy || uploading} onClick={() => scan()}>
+            <Icon name="refresh-cw" size={15} /> فحص مجلد <span dir="ltr">{info.dir}</span>
+          </button>
+          {info.has_file && (
+            <button type="button" className="btn btn--danger" disabled={busy || uploading} onClick={removeApk}>
+              <Icon name="trash-2" size={15} /> حذف الملف المنشور
+            </button>
+          )}
+        </div>
+
+        {!!info.apks_in_dir?.length && (
+          <div className="appup__files">
+            <p className="appup__sub">ملفات موجودة في المجلد ({info.apks_in_dir.length}):</p>
+            <ul>
+              {info.apks_in_dir.map((f) => (
+                <li key={f.name}>
+                  <code dir="ltr">{f.name}</code>
+                  <span className="appup__sub"> {f.size_h} · {fmtDate(f.modified)}</span>
+                  {f.current
+                    ? <span className="appup__pill">المنشور</span>
+                    : <button type="button" className="btn btn--sm btn--outline" disabled={busy} onClick={() => scan(f.name)}>اربط هذا</button>}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </section>
+
+      {/* ─── بيانات الإصدار ─── */}
+      <form className="admin-form" onSubmit={save}>
+        <div className="admin-form__section">
+          <h4><Icon name="info" size={16} /> بيانات التحديث</h4>
+
+          <label><span>الإصدار (versionName)</span>
+            <input value={versionName} onChange={(e) => setVersionName(e.target.value)} dir="ltr" placeholder="1.2.0" />
+          </label>
+
+          <label><span>رقم البناء (versionCode)</span>
+            <input value={versionCode} onChange={(e) => setVersionCode(e.target.value)} dir="ltr" inputMode="numeric" placeholder="3" />
+          </label>
+
+          <p className="admin-form__hint">
+            يُقرأ رقمان تلقائياً من داخل ملف APK عند رفعه. التطبيق يقارن رقم البناء بمثبَّته،
+            فإن كان رقمك أكبر ظهر التنبيه. <strong>كبّر الرقم في كل إصدار</strong> (1 ← 2 ← 3).
+          </p>
+
+          <label><span>ما الجديد في هذا الإصدار؟</span>
+            <textarea
+              rows={5}
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              placeholder={'• إصلاح مشكلة الفلاتر\n• سرعة أعلى في التحميل'}
+            />
+          </label>
+          <p className="admin-form__hint">تظهر هذه النقاط للمستخدم داخل بطاقة التحديث في تبويب «حسابي».</p>
+
+          <label><span>رابط تحميل خارجي (اختياري)</span>
+            <input value={url} onChange={(e) => setUrl(e.target.value)} dir="ltr" placeholder="https://github.com/…/app.apk" />
+          </label>
+          <p className="admin-form__hint">
+            إن وُضع، يُنزِّل التطبيق من هذا الرابط بدل ملف الخادم — مفيد إن كان ملفك على GitHub أو Drive.
+          </p>
+
+          <label className="appup__check">
+            <input type="checkbox" checked={force} onChange={(e) => setForce(e.target.checked)} />
+            <span>تحديث إلزامي — لا يعمل التطبيق قبل التحديث</span>
+          </label>
+          <p className="admin-form__hint">
+            استعمله عند إصلاح عطل خطير فقط؛ الإلزامي يُغلق التطبيق القديم على كل مستخدميه.
+          </p>
+
+          <button className="btn btn--primary" disabled={busy} type="submit">
+            {busy ? 'جارٍ الحفظ…' : 'حفظ بيانات التحديث'}
+          </button>
+        </div>
+      </form>
+    </div>
   )
 }
 

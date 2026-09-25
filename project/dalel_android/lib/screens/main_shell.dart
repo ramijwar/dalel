@@ -1,8 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import '../providers/app_provider.dart';
+import '../services/update_service.dart';
+import '../widgets/update_card.dart';
 import 'home_screen.dart';
 import 'search_screen.dart';
 import 'account_screen.dart';
@@ -23,6 +27,18 @@ class _MainShellState extends State<MainShell> {
   void initState() {
     super.initState();
     _watchConnectivity();
+    // تحديث إلزامي؟ أظهر النافذة عند الإقلاع، لا عند فتح «حسابي» فقط
+    WidgetsBinding.instance.addPostFrameCallback((_) => _checkForced());
+  }
+
+  Future<void> _checkForced() async {
+    final svc = UpdateService.instance;
+    if (!svc.hasUpdate) {
+      // لم يصل ردّ الخادم بعد (بدأ الفحص في شاشة البداية) — انتظر قليلاً
+      await svc.check(silent: true);
+    }
+    if (!mounted) return;
+    await ForceUpdateDialog.maybeShow(context);
   }
 
   void _watchConnectivity() {
