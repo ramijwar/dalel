@@ -124,10 +124,21 @@ jobs:
           flutter test --no-pub --reporter expanded 2>&1 | tee /tmp/test.log
           rc=${PIPESTATUS[0]}
           if [ "$rc" -ne 0 ]; then
-            grep -nE '^[0-9:]+ \+[0-9]+ -[0-9]+|Some tests failed|Expected:|Actual:' /tmp/test.log | tail -n 8 | while IFS= read -r l; do
-              echo "::error title=اختبار فاشل::$l"
+            {
+              echo "::group::الاختبارات الفاشلة (تفاصيل)"
+              awk '
+                /\[E\]$/ {in_fail=1; n++; print ""; print "══ فشل #" n " ══"; print; next}
+                in_fail && /^[0-9][0-9]:[0-9][0-9] / {in_fail=0}
+                in_fail && /Expected|Actual|Which|EXCEPTION|reason|Where|The relevant error|^ *error/ {print}
+              ' /tmp/test.log
+              echo "::endgroup::"
+            }
+            # لكل اختبار فاشل: اسمه وسطر الخطأ الأساسي — ظاهر في واجهة Actions بلا فتح السجل
+            awk '
+              /\[E\]$/ {name=$0; sub(/^[0-9:]+ \+[0-9]+ -[0-9]+: /,"",name); getline nl; while (nl !~ /Expected|Actual|Which|EXCEPTION|error/ && getline nl > 0 && nl !~ /^[0-9][0-9]:[0-9][0-9] /) {}; print name " ⟵ " nl}
+            ' /tmp/test.log | head -n 10 | while IFS= read -r l; do
+              echo "::error title=اختبار فاشل::$(echo "$l" | cut -c1-240)"
             done
-            tail -n 30 /tmp/test.log
             exit "$rc"
           fi
           grep -E 'All tests passed|\+[0-9]+:' /tmp/test.log | tail -n 2
