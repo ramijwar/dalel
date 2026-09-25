@@ -335,11 +335,12 @@ class DatabaseService {
           'CREATE INDEX IF NOT EXISTS idx_cfo_field ON category_field_options(field_id)');
       await db.execute(
           'CREATE INDEX IF NOT EXISTS idx_sf_service ON service_fields(service_id)');
-      // فهارس إضافية لتسريع الاستعلامات
-      await db.execute(
-          'CREATE INDEX IF NOT EXISTS idx_services_zone ON services(region_zone)');
-      await db.execute(
-          'CREATE INDEX IF NOT EXISTS idx_services_cat_gov ON services(category_id, governorate_id)');
+      // فهارس إضافية لتسريع الاستعلامات — مشروطة بوجود جدولها:
+      // الترقية قد تُشغَّل على قاعدة جزئية فينهار CREATE INDEX
+      // بـ«no such table: main.services».
+      await _indexIfTable(db, 'idx_services_zone', 'services', 'region_zone');
+      await _indexIfTable(
+          db, 'idx_services_cat_gov', 'services', 'category_id, governorate_id');
     }
 
     //   ٢ → ٣: وحدة الحقل الرقمي + إخفاء القيمة المنطقية عند «لا»
@@ -357,6 +358,18 @@ class DatabaseService {
     if (oldV < 4 && newV >= 4) {
       await _addColumnIfMissing(db, 'categories', 'filters', "TEXT DEFAULT ''");
     }
+  }
+
+  /// يُنشئ فهرساً إن كان جدوله موجوداً فعلاً.
+  /// SQLite لا تملك CREATE INDEX IF TABLE EXISTS، ووجود الفهرس شرط
+  /// لازم لكن غير كافٍ: الجدول نفسه قد لا يكون قد أُنشئ بعد.
+  Future<void> _indexIfTable(
+      Database db, String index, String table, String columns) async {
+    final t = await db.rawQuery(
+        "SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?",
+        [table]);
+    if (t.isEmpty) return;
+    await db.execute('CREATE INDEX IF NOT EXISTS $index ON $table($columns)');
   }
 
   /// إضافة عمود إن لم يكن موجوداً (SQLite لا يدعم ADD COLUMN IF NOT EXISTS)

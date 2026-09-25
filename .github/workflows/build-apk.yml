@@ -133,6 +133,12 @@ jobs:
               ' /tmp/test.log
               echo "::endgroup::"
             }
+            # أسباب الاستثناءات تُطبع غالباً *قبل* سطر [E] («exception logs above»)
+            grep -nE 'EXCEPTION CAUGHT|was thrown|^Expected:|^ *Actual:|^ *Which:|The following' /tmp/test.log \
+              | tail -n 20 | while IFS= read -r l; do
+              echo "::error title=سبب الاستثناء::$(echo "$l" | cut -c1-400)"
+            done
+
             # لكل اختبار فاشل: سطر واحد مضغوط يحمل السبب كاملاً (يظهر في واجهة Actions)
             awk '
               BEGIN { buf=""; infail=0 }
