@@ -259,6 +259,25 @@ class _ServiceDetailScreenState extends State<ServiceDetailScreen> {
     );
   }
 
+  /// صف حقل ديناميكي بأيقونته الخاصة.
+  ///
+  /// الخادم يرسل `icon` لكل حقل (مثل `hash` لسعر المعاينة و`type` للنص، أو
+  /// إيموجي لخيارات القائمة). كان التطبيق يرسم `LucideIcons.tag` لكل الحقول
+  /// فيتجاهل الأيقونة المختارة من اللوحة — نرسمها الآن: اسم Lucide معروف ←
+  /// أيقونته، رمز تعبيري ← يُعرض كما هو، وإلا فالوسم كاحتياط.
+  _InfoRowData _fieldRow(ResolvedField f) {
+    final ic = f.icon.trim();
+    if (ic.isEmpty) return _InfoRowData(LucideIcons.tag, f.label, f.display);
+    if (!AppIcon.looksLikeName(ic)) {
+      return _InfoRowData(LucideIcons.tag, f.label, f.display, emoji: ic);
+    }
+    return _InfoRowData(
+      AppIcons.has(ic) ? AppIcons.get(ic) : LucideIcons.tag,
+      f.label,
+      f.display,
+    );
+  }
+
   Widget _buildInfo(Color accent) {
     final rows = <_InfoRowData>[
       if (_s.fullRegionLabel.isNotEmpty)
@@ -271,10 +290,10 @@ class _ServiceDetailScreenState extends State<ServiceDetailScreen> {
         _InfoRowData(LucideIcons.user, 'المسؤول', _s.ownerName!),
       if (_s.note.isNotEmpty)
         _InfoRowData(LucideIcons.fileText, 'ملاحظات', _s.note),
-      // الحقول الخاصة بالقسم — محلولة من الخادم (مثل اختصاص الطبيب)
+      // الحقول الخاصة بالقسم — محلولة من الخادم (مثل اختصاص الطبيب وسعر المعاينة)
       ..._s.fields
           .where((f) => f.display.isNotEmpty)
-          .map((f) => _InfoRowData(LucideIcons.tag, f.label, f.display)),
+          .map(_fieldRow),
     ];
 
     if (rows.isEmpty) return const SizedBox.shrink();
@@ -317,7 +336,18 @@ class _ServiceDetailScreenState extends State<ServiceDetailScreen> {
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Icon(r.icon, size: 15, color: AppTheme.textMuted),
+                    if (r.emoji != null && r.emoji!.isNotEmpty)
+                      SizedBox(
+                        width: 15,
+                        child: Text(
+                          r.emoji!,
+                          style: const TextStyle(
+                              fontSize: 12.5, height: 1.2),
+                          textAlign: TextAlign.center,
+                        ),
+                      )
+                    else
+                      Icon(r.icon, size: 15, color: AppTheme.textMuted),
                     const SizedBox(width: 10),
                     SizedBox(
                       width: 62,
@@ -386,8 +416,20 @@ class _ServiceDetailScreenState extends State<ServiceDetailScreen> {
             ],
           ),
           const SizedBox(height: 12),
-          ..._s.schedule.map((r) {
-            final isToday = r.day == DateTime.now().weekday % 7;
+          // الأسبوع كاملاً (٠ الأحد … ٦ السبت) كي يظهر اليوم الذي لا دوام
+          // فيه «عطلة» بدل أن يُحذف من القائمة. يومٌ بفترتين يُعرض بسطر واحد
+          // يفصل بينهما «·»، والأيام المرسلة باسم is_24h تعرض «٢٤ ساعة».
+          ...List.generate(7, (d) {
+            final rows = _s.schedule.where((r) => r.day == d).toList()
+              ..sort((a, b) => a.from.compareTo(b.from));
+            final open = rows.where((r) => r.isOpen).toList();
+            final isToday = d == DateTime.now().weekday % 7;
+            final value = open.isEmpty
+                ? 'عطلة'
+                : open
+                    .map((r) => r.is24 ? '٢٤ ساعة' : '${r.from} – ${r.to}')
+                    .join('  ·  ');
+            final isOff = open.isEmpty;
             return Container(
               margin: const EdgeInsets.only(bottom: 6),
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
@@ -399,11 +441,12 @@ class _ServiceDetailScreenState extends State<ServiceDetailScreen> {
                 ),
               ),
               child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   SizedBox(
                     width: 62,
                     child: Text(
-                      r.dayName,
+                      ScheduleRow.dayNames[d],
                       style: TextStyle(
                         fontSize: 12.5,
                         fontWeight: isToday ? FontWeight.w800 : FontWeight.w600,
@@ -413,27 +456,22 @@ class _ServiceDetailScreenState extends State<ServiceDetailScreen> {
                       ),
                     ),
                   ),
-                  const Spacer(),
-                  if (r.isOpen)
-                    Text(
-                      '${r.from} – ${r.to}',
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      value,
+                      textAlign: TextAlign.left,
                       style: TextStyle(
                         fontSize: 12.5,
                         fontWeight: FontWeight.w700,
-                        color: isToday
-                            ? AppTheme.primaryDark
-                            : AppTheme.textPrimary,
-                      ),
-                    )
-                  else
-                    const Text(
-                      'مغلقة',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                        color: AppTheme.closed,
+                        color: isOff
+                            ? AppTheme.textMuted
+                            : (isToday
+                                ? AppTheme.primaryDark
+                                : AppTheme.textPrimary),
                       ),
                     ),
+                  ),
                 ],
               ),
             );
@@ -565,7 +603,11 @@ class _InfoRowData {
   final String value;
   final bool isLtr;
 
-  _InfoRowData(this.icon, this.label, this.value, {this.isLtr = false});
+  /// رمز تعبيري يُرسم كنص بدل أيقونة Lucide (خيارات الحقول قد تحمل إيموجي)
+  final String? emoji;
+
+  _InfoRowData(this.icon, this.label, this.value,
+      {this.isLtr = false, this.emoji});
 }
 
 class _BigAction extends StatelessWidget {

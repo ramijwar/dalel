@@ -1510,6 +1510,8 @@ function api_owner_update(array $u, array $svc): void
             $govId,
             (int) $svc['id'],
         ]);
+    sync_service_specialty((int) $svc['id'], body(), $meta);
+
     log_activity('update', 'service', (int) $svc['id'], 'عدّل بيانات الخدمة', 'user', (int) $u['id']);
     ok(['service' => shape_service(owned_service($u, (int) $svc['id']), schedules_of((int) $svc['id'])), 'message' => 'تم حفظ التعديلات']);
 }
@@ -1667,6 +1669,85 @@ function admin_service_get(int $id): void
     ok(['service' => $item]);
 }
 
+/**
+ * معرّف الاختصاص من قيمته (رقم معرّف أو اسمه في جدول specialties).
+ * يُعاد null إن لم تُطابق شيئاً — فلا تُكتب مراجع معلّقة.
+ */
+function specialty_id_of($value): ?int
+{
+    if ($value === null || is_array($value)) return null;
+    $v = trim((string) $value);
+    if ($v === '') return null;
+
+    static $byName = null;
+    static $byId = null;
+    if ($byName === null) {
+        $byName = [];
+        $byId = [];
+        try {
+            foreach (db()->query("SELECT id, name FROM specialties") as $r) {
+                $byName[trim((string) $r['name'])] = (int) $r['id'];
+                $byId[(int) $r['id']] = true;
+            }
+        } catch (\Throwable $e) {
+            $byName = [];
+            $byId = [];
+        }
+    }
+    if (ctype_digit($v)) {
+        $id = (int) $v;
+        return isset($byId[$id]) ? $id : null;   // لا مراجع معلّقة
+    }
+    return $byName[$v] ?? null;
+}
+
+/**
+ * مزامنة عمود `specialty_id` مع الحقل الديناميكي «الاختصاص».
+ *
+ * قسم «عيادات أطباء» يخزّن الاختصاص في حقل ديناميكي (`meta.specialty`)،
+ * بينما التجميع في الواجهة يقرأ العمود `specialty_id`. الخدمة المُضافة من
+ * اللوحة كانت تملأ الحقل فقط فيبقى العمود فارغاً ⇒ تظهر تحت «غير محدد».
+ *
+ * تُنفَّذ كتحديث **مستقل** (لا تُضاف مفاتيح إلى مصفوفة service_payload لأنها
+ * تُمرَّر مباشرة إلى PDO بمعاملات مُسمّاة، وأي مفتاح زائد يُفشل الإدراج).
+ * ولا تلمس شيئاً إن لم يُرسل الحقل إطلاقاً، ولا تُفرّغ العمود إن تعذّر
+ * التعرّف على القيمة.
+ */
+function sync_service_specialty(int $serviceId, array $b, array $meta): void
+{
+    // مصادر القيمة بالترتيب: عمود صريح · حقل النموذج (fields) · meta المُتحقَّق
+    // منه · مفتاح مباشر في الجسم. الحقل يُقرأ من `fields` مباشرةً أيضاً لأن
+    // نموذج اللوحة قد يرسل الحقول بلا `category_id` فلا يمرّ عليها service_meta.
+    $sent = false;
+    $value = null;
+    if (array_key_exists('specialty_id', $b)) {
+        $value = $b['specialty_id'];
+        $sent = true;
+    } elseif (isset($b['fields']) && is_array($b['fields']) && array_key_exists('specialty', $b['fields'])) {
+        $value = $b['fields']['specialty'];
+        $sent = true;
+    } elseif (array_key_exists('specialty', $meta)) {
+        $value = $meta['specialty'];
+        $sent = true;
+    } elseif (array_key_exists('specialty', $b)) {
+        $value = $b['specialty'];
+        $sent = true;
+    }
+    if (!$sent) return;
+
+    if ($value === null) return;
+    $v = is_array($value) ? '' : trim((string) $value);
+    if ($v === '') {
+        // مسح صريح
+        db()->prepare("UPDATE services SET specialty_id = NULL WHERE id = ?")->execute([$serviceId]);
+        return;
+    }
+    $id = specialty_id_of($v);
+    if ($id !== null) {
+        db()->prepare("UPDATE services SET specialty_id = ? WHERE id = ?")->execute([$id, $serviceId]);
+    }
+}
+
 function service_payload(bool $requireCategory = true): array
 {
     $b = body();
@@ -1756,6 +1837,7 @@ function admin_service_create(): void
                          VALUES (:category_id,:region_id,:governorate_id,:owner_id,:name,:address,:phone,:whatsapp,:note,:meta,:photo,:sort_order,:layout,:is_active,:is_verified)");
     $st->execute($p);
     $id = (int) db()->lastInsertId();
+    sync_service_specialty($id, body(), service_meta(body(), (int) $p['category_id']));
     ensure_status_row($id);
     if (!empty(body()['schedule']) && is_array(body()['schedule'])) {
         save_schedule($id, body()['schedule']);
@@ -1793,6 +1875,8 @@ function admin_service_update(?int $id): void
     if (!$sets) fail('لا توجد تغييرات');
     $args['id'] = $id;
     db()->prepare("UPDATE services SET " . implode(', ', $sets) . ", updated_at = '" . now_sql() . "' WHERE id = :id")->execute($args);
+
+    sync_service_specialty($id, body(), service_meta(body(), (int) $p['category_id']));
 
     if (array_key_exists('schedule', body()) && is_array(body()['schedule'])) {
         save_schedule($id, body()['schedule']);
@@ -2294,6 +2378,7 @@ function admin_request_approve(int $id): void
         $req['meta'] ?: '{}',
     ]);
     $sid = (int) db()->lastInsertId();
+    sync_service_specialty($sid, [], json_field($req['meta'] ?: '{}'));
     ensure_status_row($sid);
 
     // جدول دوام افتراضي إن أُرسل، وإلا جدول عام 9-9

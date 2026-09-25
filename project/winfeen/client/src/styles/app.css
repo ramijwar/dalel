@@ -794,8 +794,10 @@ dialog.modal {
   border: none;
   border-radius: var(--radius);
   padding: 0;
-  max-width: 500px;
-  width: calc(100% - 32px);
+  /* ٥٠٠px كانت تضيّق نماذج اللوحة (باني الحقول) فتُقصّ النصوص.
+     ٦٢٠px للعادي و٩٠٠px للنافذة العريضة — وكلتاهما لا تتجاوز الشاشة. */
+  max-width: 620px;
+  width: min(620px, calc(100% - 24px));
   box-shadow: var(--shadow-lg);
   background: transparent;
   overflow: visible;
@@ -808,7 +810,8 @@ dialog.modal::backdrop {
 }
 
 dialog.modal.modal--wide {
-  max-width: 700px;
+  max-width: 900px;
+  width: min(900px, calc(100% - 24px));
 }
 
 .modal__box {
@@ -1013,6 +1016,8 @@ dialog.modal.modal--wide {
   padding: 10px 12px;
   border-bottom: 1px solid var(--border-light);
   vertical-align: middle;
+  /* داخل النوافذ الضيقة يلتفّ النص بدل أن يُقصّ (مصدر الفلتر مثلاً) */
+  overflow-wrap: anywhere;
 }
 
 .admin-table tr:last-child td { border-bottom: none; }
@@ -3213,8 +3218,20 @@ dialog.modal.modal--wide {
 .opt-picker__check { display: flex; color: var(--primary, #0ea5e9); flex-shrink: 0; }
 
 /* ─── الحقول الديناميكية في نموذج الخدمة ─── */
-.dyn-fields { display: grid; gap: 13px; }
-.dyn-fields__row { display: grid; gap: 6px; }
+/* شبكة مرنة: كل حقل يأخذ عموداً لا يقلّ عن ٢٤٠px حتى لا يُقصّ نصّه،
+   والنص الطويل (textarea) يمتد على كامل العرض. */
+.dyn-fields {
+  display: grid;
+  gap: 12px 14px;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  align-items: start;
+}
+.dyn-fields__row { display: grid; gap: 6px; min-width: 0; }
+.dyn-fields__row--wide { grid-column: 1 / -1; }
+.dyn-fields__row .inp,
+.dyn-fields__row input,
+.dyn-fields__row select,
+.dyn-fields__row textarea { width: 100%; }
 .dyn-fields__label { font-size: 13px; font-weight: 700; color: var(--text, #1f2937); }
 .dyn-fields__label .req { color: #dc2626; margin-inline-start: 3px; }
 .dyn-fields__help { font-size: 11.5px; color: var(--muted, #9aa5b1); }
@@ -3238,7 +3255,7 @@ dialog.modal.modal--wide {
   gap: 9px;
 }
 .fb__field-head { display: flex; align-items: center; gap: 8px; }
-.fb__field-head .inp { flex: 1; }
+.fb__field-head .inp { flex: 1; min-width: 0; }
 .fb__index {
   width: 22px; height: 22px; flex-shrink: 0;
   display: grid; place-items: center;
@@ -3246,14 +3263,25 @@ dialog.modal.modal--wide {
   color: var(--primary, #0284c7);
   border-radius: 6px; font-size: 11.5px; font-weight: 800;
 }
-.fb__grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px; }
-.fb__cell { display: grid; gap: 4px; }
+/* ١٣٠px كانت تضغط «نص إرشادي» و«الوحدة» في نافذة القسم.
+   ٢٠٠px حدّ أدنى يضمن ظهور النص كاملاً، والأعمدة تتوزّع تلقائياً بعرض النافذة. */
+.fb__grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 9px; }
+.fb__cell { display: grid; gap: 4px; min-width: 0; }
+.fb__cell .inp,
+.fb__cell input,
+.fb__cell select { width: 100%; }
 .fb__cell > span { font-size: 11.5px; font-weight: 600; color: var(--muted, #6b7280); }
 .fb__flags { display: flex; flex-wrap: wrap; gap: 13px; }
 
 .fb__options { display: grid; gap: 7px; padding-top: 4px; border-top: 1px dashed var(--border, #e5e9ef); }
 .fb__options-head { font-size: 12px; font-weight: 700; color: var(--muted, #6b7280); display: flex; align-items: center; gap: 5px; }
-.fb__opt { display: grid; grid-template-columns: 26px 108px 1fr 96px 28px; gap: 6px; align-items: center; }
+.fb__opt {
+  display: grid;
+  grid-template-columns:
+    26px minmax(90px, 1fr) minmax(140px, 1.8fr) minmax(78px, 1fr) 28px;
+  gap: 6px; align-items: center;
+}
+.fb__opt > * { min-width: 0; }
 .fb__opt-icon { display: grid; place-items: center; color: var(--primary, #0ea5e9); }
 .fb__opt-icon-in { font-size: 12px; }
 .fb__opt-val { opacity: .75; }

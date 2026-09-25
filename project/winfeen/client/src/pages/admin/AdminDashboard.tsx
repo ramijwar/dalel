@@ -377,7 +377,7 @@ function CategoriesTab() {
           </div>
         ))}
       </div>
-      <Modal open={showAdd} onClose={() => { setShowAdd(false); setEditCat(null) }} title={editCat ? `تعديل: ${editCat.name}` : 'إضافة قسم'}>
+      <Modal open={showAdd} onClose={() => { setShowAdd(false); setEditCat(null) }} title={editCat ? `تعديل: ${editCat.name}` : 'إضافة قسم'} wide>
         <CategoryForm
           key={editCat ? `cat-${editCat.id}` : `cat-new-${formNonce}`}
           cat={editCat}
@@ -689,7 +689,7 @@ function FiltersTab() {
         />
       </Modal>
 
-      <Modal open={!!assignCat} onClose={() => setAssignCat(null)} title={assignCat ? `فلاتر قسم: ${assignCat.name}` : ''}>
+      <Modal open={!!assignCat} onClose={() => setAssignCat(null)} title={assignCat ? `فلاتر قسم: ${assignCat.name}` : ''} wide>
         {assignCat && (
           <CategoryFiltersForm
             key={`assign-${assignCat.id}`}

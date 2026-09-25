@@ -16,6 +16,7 @@
 """
 
 import argparse
+import json
 import os
 import re
 import sqlite3
@@ -60,6 +61,30 @@ CAT_SETS = {}
 for slug, arr in re.findall(r"'([\w-]+)':\s*\[([^\]]*)\]", set_block, re.S):
     CAT_SETS[slug] = re.findall(r"'([^']+)'", arr)
 
+# ─── الويب: ما يستطيع رسمه (خريطة SVG) ────────────────────────────
+WEB_MAP = set(re.findall(r"^\s*'([a-z0-9-]+)':", block(web_src, 'LUCIDE_PATHS'), re.M))
+
+# ─── الخادم: أسماء أيقونات يولّدها لحقول الأقسام ──────────────────
+# fields.php يعطي كل حقل أيقونة: 'hash' للأرقام و'type' لغيرها.
+def api_field_icons():
+    """أسماء الأيقونات الثابتة في fields.php (لا قيم الخيارات القادمة من القاعدة).
+
+    يحلّل كل سطر فيه `'icon' =>` ويأخذ الحروف اللاتينية بين علامتي تنصيص،
+    مع تجاهل معاملات المقارنة قبل علامة الاستفهام في التعبيرات الشرطية
+    (مثل `$type === 'number' ? 'hash' : 'type'` ⇒ hash · type).
+    """
+    out = set()
+    for line in read(os.path.join(ROOT, 'winfeen', 'api', 'includes', 'fields.php')).splitlines():
+        if "'icon'" not in line or '=>' not in line:
+            continue
+        expr = line.split('=>', 1)[1]
+        if '?' in expr:
+            expr = expr.split('?', 1)[1]
+        out |= set(re.findall(r"'([a-z0-9-]{2,})'", expr))
+    return out or {'hash', 'type'}
+
+API_FIELD_ICONS = api_field_icons()
+
 # ─── التطبيق: ما يستطيع رسمه ──────────────────────────────────────
 app_src = read(APP)
 MAP = dict(re.findall(r"'([^']+)':\s*LucideIcons\.(\w+)", block(app_src, '_map = {')))
@@ -93,6 +118,7 @@ def resolves(name):
 
 
 problems = []
+problems_web = []
 
 print('═' * 66)
 print(' فحص أيقونات لوحة التحكم مقابل تطبيق أندرويد')
@@ -124,19 +150,61 @@ for slug, icons in CAT_SETS.items():
     problems += bad
 print()
 
-# 3) الأيقونات المستخدمة فعليًا في قاعدة البيانات
-print('── ٣) الأيقونات المستخدمة في قاعدة البيانات ──')
+# 3) الخادم: أيقونات الحقول الديناميكية — يجب أن ترسمها الواجهتان
+print('── ٣) أيقونات الحقول الديناميكية التي يولّدها الخادم ──')
+for n in sorted(API_FIELD_ICONS):
+    web_ok = n in WEB_MAP
+    app_ok = resolves(n)[0]
+    mark = f"{GREEN}✅{RESET}" if (web_ok and app_ok) else f"{RED}✘{RESET}"
+    why = []
+    if not web_ok:
+        why.append('غائبة عن خريطة الويب ⇒ تُطبع نصًّا')
+        problems_web.append(n)
+    if not app_ok:
+        why.append('غائبة عن خريطة التطبيق')
+    print(f"  {mark} {n:<22} ويب {'✅' if web_ok else '✘'} · تطبيق {'✅' if app_ok else '✘'}"
+          + (f"  {DIM}{' · '.join(why)}{RESET}" if why else ''))
+print()
+
+# 4) تطابق خرائط الأيقونات بين الويب والتطبيق
+print('── ٤) تطابق خرائط الأيقونات بين الويب والتطبيق ──')
+only_app = sorted(n for n in MAP if n not in WEB_MAP)
+only_web = sorted(n for n in WEB_MAP if n not in MAP and n not in ALIASES)
+print(f"  خريطة الويب: {len(WEB_MAP)} · خريطة التطبيق: {len(MAP)}")
+if only_app:
+    print(f"  {RED}✘ في التطبيق وليست في الويب ({len(only_app)}):{RESET} {' · '.join(only_app)}")
+    problems_web += only_app
+else:
+    print(f"  {GREEN}✅ كل أسماء التطبيق لها مقابل في الويب{RESET}")
+if only_web:
+    print(f"  {YELLOW}ℹ في الويب وليست في التطبيق ({len(only_web)}) — تُرسم في الويب "
+          f"ويعوّضها اسم بديل/بديل افتراضي في التطبيق{RESET}")
+print()
+
+# 5) الأيقونات المستخدمة فعليًا في قاعدة البيانات
+print('── ٥) الأيقونات المستخدمة في قاعدة البيانات ──')
 db_path = os.path.join(ROOT, 'winfeen', 'api', 'storage', 'app.sqlite')
 if os.path.exists(db_path):
     con = sqlite3.connect(db_path)
     used = []
     for sql in ("SELECT name, icon FROM categories",
-                "SELECT label, icon FROM category_fields WHERE icon <> ''",
-                "SELECT label, icon FROM field_options WHERE icon <> ''"):
+                "SELECT label, icon FROM category_field_options",
+                "SELECT label, icon FROM filters"):
         try:
             used += [(f'{r[0]}', r[1]) for r in con.execute(sql) if r[1]]
         except sqlite3.Error:
             pass
+    # أيقونات الخدمات المحفوظة داخل meta (يختارها المدير من اللوحة)
+    try:
+        for (nm, meta) in con.execute("SELECT name, meta FROM services WHERE meta LIKE '%icon%'"):
+            try:
+                ic = (json.loads(meta) or {}).get('icon')
+            except Exception:
+                ic = None
+            if ic:
+                used.append((f'{nm}', ic))
+    except sqlite3.Error:
+        pass
     con.close()
     if not used:
         print('  (لا أيقونات مسجّلة)')
@@ -151,7 +219,10 @@ else:
 print()
 
 print('═' * 66)
-if problems:
-    print(f" {RED}النتيجة: {len(problems)} اسمًا بحاجة إصلاح{RESET}  →  أضِفه إلى _map أو _aliases")
+if problems or problems_web:
+    if problems:
+        print(f" {RED}التطبيق: {len(set(problems))} اسمًا بحاجة إصلاح{RESET}  →  أضِفه إلى _map أو _aliases")
+    if problems_web:
+        print(f" {RED}الويب: {len(set(problems_web))} اسمًا بحاجة إصلاح{RESET}  →  أضِفه إلى LUCIDE_PATHS")
     sys.exit(1)
-print(f" {GREEN}النتيجة: سليم ✅ — كل أيقونات اللوحة تُرسم في التطبيق{RESET}")
+print(f" {GREEN}النتيجة: سليم ✅ — كل أيقونات اللوحة والحقول تُرسم في الويب والتطبيق{RESET}")

@@ -474,22 +474,49 @@ class ScheduleRow {
   final String from;
   final String to;
 
+  /// دوام متواصل ٢٤ ساعة — يُرسله الخادم باسم `is_24h`
+  final bool is24;
+
   ScheduleRow({
     required this.day,
     this.isOpen = true,
     this.from = '08:00',
     this.to = '20:00',
+    this.is24 = false,
   });
 
-  factory ScheduleRow.fromJson(Map<String, dynamic> j) => ScheduleRow(
-        day: _i(j['day']),
-        isOpen: _b(j['is_open'] ?? j['open']),
-        from: _sn(j['from'] ?? j['open_time']) ?? '08:00',
-        to: _sn(j['to'] ?? j['close_time']) ?? '20:00',
-      );
+  /// ⚠ مفاتيح الخادم هي `day` · `opens` · `closes` · `is_24h`
+  /// (انظر `schedules_map()` و`save_schedule()` في api.php)، بينما كان
+  /// التطبيق يقرأ `is_open` · `from` · `to` ⇒ كل الحقول تُقرأ فارغة
+  /// فيصير `isOpen` = false وتظهر **كل الأيام «مغلقة»**. نقرأ هنا
+  /// المفاتيح الحديثة والقديمة معاً حتى لا ينكسر أي إصدار من الخادم.
+  factory ScheduleRow.fromJson(Map<String, dynamic> j) {
+    final is24 = _b(j['is_24h'] ?? j['is24']);
+    final hasFlag = j.containsKey('is_open') || j.containsKey('open');
+    // يوم مُدرَج في الجدول = دوام مفتوح، إلا إن أرسل الخادم علماً صريحاً
+    final open = is24 || (hasFlag ? _b(j['is_open'] ?? j['open']) : true);
+    return ScheduleRow(
+      day: _i(j['day']),
+      isOpen: open,
+      from: _sn(j['opens'] ?? j['from'] ?? j['open_time']) ??
+          (is24 ? '00:00' : '08:00'),
+      to: _sn(j['closes'] ?? j['to'] ?? j['close_time']) ??
+          (is24 ? '23:59' : '20:00'),
+      is24: is24,
+    );
+  }
 
-  Map<String, dynamic> toJson() =>
-      {'day': day, 'is_open': isOpen ? 1 : 0, 'from': from, 'to': to};
+  /// تُرسل بمفاتيح الخادم نفسها. اليوم المغلق يُرسل بأوقات فارغة فيتجاهله
+  /// `save_schedule()` (لا يُدرج صفاً) فيبقى اليوم مغلقاً.
+  Map<String, dynamic> toJson() {
+    if (is24) {
+      return {'day': day, 'opens': '00:00', 'closes': '23:59', 'is_24h': true};
+    }
+    if (!isOpen) {
+      return {'day': day, 'opens': '', 'closes': '', 'is_24h': false};
+    }
+    return {'day': day, 'opens': from, 'closes': to, 'is_24h': false};
+  }
 
   static const List<String> dayNames = [
     'الأحد',

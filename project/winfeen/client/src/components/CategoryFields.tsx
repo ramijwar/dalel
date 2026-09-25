@@ -153,7 +153,12 @@ export function DynamicFields({ fields, values, onChange }: DynamicFieldsProps) 
         const uid = `fld-${f.key}`
 
         return (
-          <div className="dyn-fields__row" key={f.key}>
+          <div
+            className={`dyn-fields__row${
+              f.type === 'textarea' ? ' dyn-fields__row--wide' : ''
+            }`}
+            key={f.key}
+          >
             <label className="dyn-fields__label" htmlFor={uid}>
               {f.label}
               {f.required && <span className="req">*</span>}

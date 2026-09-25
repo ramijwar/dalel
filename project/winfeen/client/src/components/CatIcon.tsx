@@ -42,6 +42,17 @@ export default function CatIcon({ icon, size = 20, className = '', meta }: Props
     )
   }
 
-  // إيموجي أو قيمة نصية (بيانات قديمة)
-  return <span className={`cat-emoji ${className}`} style={{ fontSize: size }}>{icon || '📍'}</span>
+  // ─── احتياط ───
+  // الإيموجي (💊 👶) يُعرض كما هو كنص، أما اسم أيقونة مجهول فلا يُطبع كنص
+  // خام — كان `hash` (أيقونة حقل السعر) يظهر حرفياً بجانب القيمة لأن الاسم
+  // غير موجود في الخريطة. الآن يُستبدل بدبوس الموقع.
+  const raw = String(name ?? '').trim()
+  const looksLikeIconName = /^[a-z0-9][a-z0-9\-_]*$/i.test(raw)   // مثل hash · circle-dot
+  const looksLikeEmoji = /\p{Extended_Pictographic}/u.test(raw)   // 💊 👶 🏥
+  const asText = raw !== '' && !looksLikeIconName && (looksLikeEmoji || [...raw].length <= 2)
+  return (
+    <span className={`cat-emoji ${className}`} style={{ fontSize: size }}>
+      {asText ? raw : '📍'}
+    </span>
+  )
 }

@@ -649,6 +649,7 @@ class _ScheduleSheetState extends State<_ScheduleSheet> {
         isOpen: row.isOpen,
         from: isFrom ? str : row.from,
         to: isFrom ? row.to : str,
+        is24: row.is24,
       );
     });
   }
@@ -739,7 +740,8 @@ class _ScheduleSheetState extends State<_ScheduleSheet> {
                                     day: r.day,
                                     isOpen: v,
                                     from: r.from,
-                                    to: r.to)),
+                                    to: r.to,
+                                    is24: r.is24)),
                             activeTrackColor: AppTheme.open,
                           ),
                           const Spacer(),

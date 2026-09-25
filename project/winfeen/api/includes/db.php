@@ -316,6 +316,46 @@ function migrate(PDO $pdo): void
     $pdo->exec("CREATE INDEX IF NOT EXISTS idx_catfilter_flt ON category_filters(filter_id)");
 
     seed_filters($pdo);
+
+    /* ─── مزامنة specialty_id مع الحقل الديناميكي ───
+     * الخدمات التي أُضيفت من اللوحة قبل هذا الإصلاح كُتب الاختصاص فيها في
+     * الحقل فقط (`meta.specialty`) وبقي العمود فارغاً ⇒ ظهرت في الواجهة
+     * تحت «غير محدد». هنا نملأ العمود مرة واحدة، بالمعرّف ثم بالاسم. */
+    try {
+        $hasSpec = false;
+        foreach ($pdo->query("PRAGMA table_info(services)") as $col) {
+            if (($col['name'] ?? '') === 'specialty_id') { $hasSpec = true; break; }
+        }
+        if ($hasSpec) {
+            $pending = $pdo->query("SELECT id, meta FROM services WHERE specialty_id IS NULL AND meta LIKE '%specialty%'")->fetchAll();
+            if ($pending) {
+                $byName = [];
+                $ids = [];
+                foreach ($pdo->query("SELECT id, name FROM specialties") as $r) {
+                    $byName[trim((string) $r['name'])] = (int) $r['id'];
+                    $ids[(int) $r['id']] = true;
+                }
+                $upd = $pdo->prepare("UPDATE services SET specialty_id = ? WHERE id = ?");
+                foreach ($pending as $row) {
+                    $meta = json_decode((string) $row['meta'], true);
+                    if (!is_array($meta)) continue;
+                    $v = $meta['specialty'] ?? null;
+                    if ($v === null || is_array($v)) continue;
+                    $v = trim((string) $v);
+                    if ($v === '') continue;
+                    $id = null;
+                    if (ctype_digit($v)) {
+                        $id = isset($ids[(int) $v]) ? (int) $v : null;
+                    } else {
+                        $id = $byName[$v] ?? null;
+                    }
+                    if ($id !== null) $upd->execute([$id, (int) $row['id']]);
+                }
+            }
+        }
+    } catch (\Throwable $e) {
+        // لا يُفشل الترحيل أبداً: الإصلاح تجميلي للبيانات القديمة فقط.
+    }
 }
 
 /**
