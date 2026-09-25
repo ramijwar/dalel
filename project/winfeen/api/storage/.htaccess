@@ -1,0 +1,51 @@
+# ══════════════════════════════════════════════════════════════════════
+#  🔴 منع الوصول المباشر إلى مجلد التخزين — ملف أمني حرج
+# ══════════════════════════════════════════════════════════════════════
+#
+#  لماذا هذا الملف ضروري؟
+#
+#  يحتوي هذا المجلد على:
+#    • app.sqlite   → قاعدة البيانات كاملة (هاشات كلمات المرور · أرقام الهاتف)
+#    • secret.key   → مفتاح توقيع الجلسات (HMAC)
+#
+#  وكان ملف .htaccess في الجذر يسمح بخدمة "أي ملف حقيقي موجود" مباشرةً
+#  (RewriteCond %{REQUEST_FILENAME} -f). لذا كان أي زائر يستطيع:
+#
+#      https://t3lam.site/dalel/api/storage/app.sqlite   ← تنزيل كل البيانات
+#      https://t3lam.site/dalel/api/storage/secret.key   ← سرقة مفتاح الجلسات
+#
+#  وبالمفتاح المسروق يمكن تزوير رمز دخول بدور «مدير» والدخول بصلاحيات
+#  كاملة دون أي كلمة مرور — سيطرة كاملة على الموقع.
+#
+#  هذا الملف يمنع ذلك على Apache و LiteSpeed.
+#  ⚠️ إن كان خادمك Nginx: أضِف في إعداد الموقع (انظر README):
+#        location ~ ^/api/storage/ { deny all; return 404; }
+#
+#  ملاحظة: هذا المنع لا يؤثر على عمل التطبيق — الصور تُخدَم عبر مسار
+#  /uploads/ الذي يعالجه router.php بقراءة PHP (لا خدمة مباشرة).
+# ══════════════════════════════════════════════════════════════════════
+
+# Apache 2.4+
+<IfModule mod_authz_core.c>
+    Require all denied
+</IfModule>
+
+# Apache 2.2
+<IfModule !mod_authz_core.c>
+    Order allow,deny
+    Deny from all
+</IfModule>
+
+# منع تصفّح المجلد
+Options -Indexes
+
+# منع خدمة أي ملف يحمل امتداداً حسّاساً حتى لو تجاهل الخادم القواعد أعلاه
+<FilesMatch "\.(sqlite|sqlite3|db|key|sql|bak|backup)$">
+    <IfModule mod_authz_core.c>
+        Require all denied
+    </IfModule>
+    <IfModule !mod_authz_core.c>
+        Order allow,deny
+        Deny from all
+    </IfModule>
+</FilesMatch>

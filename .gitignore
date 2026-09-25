@@ -1,0 +1,73 @@
+# ══════════════════════════════════════════════════════════════
+#  دليل الدير — ما لا يُتتبَّع في Git
+# ══════════════════════════════════════════════════════════════
+
+# ── بناء الواجهة (يُعاد توليده بـ npm run build) ──
+node_modules/
+**/node_modules/
+project/winfeen/client/dist/
+project/winfeen/client/dist-audit/
+project/winfeen/client/vite.config.ts.timestamp-*
+*.tsbuildinfo
+
+# ── Flutter / Android (يُعاد توليده) ──
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+**/build/
+project/dalel_android/android/.gradle/
+project/dalel_android/android/local.properties
+project/dalel_android/android/app/src/main/java/io/flutter/plugins/GeneratedPluginRegistrant.java
+*.iml
+*.jks
+*.keystore
+key.properties
+
+# ── أدوات محلية ──
+# ملاحظة: php-bin/php (ثنائي PHP 8.3 للينكس ~٧ ميجا) **متتبَّع عمداً**.
+# السبب: هذه البيئة لا تحتوي PHP مثبّتاً، وبدون هذا الثنائي لا يمكن
+# تشغيل الخادم ولا اختبار الـ API محلياً. وهو أداة المشروع لا مخرَج مُولَّد.
+
+# ── آثار قواعد البيانات (WAL) ──
+*.sqlite-shm
+*.sqlite-wal
+
+# ── ملاحظة على قواعد البيانات ──
+# قاعدة واحدة فقط في المستودع كله — مشمولة عمداً (سياسة المشروع: إرفاق البيانات):
+#   project/winfeen/api/storage/app.sqlite   (٤٠٤ خدمة · md5 58d6de74…)
+# وكل نسخة سابقة (appnew.sqlite · لقطتا dalel/daleltest · أرشيف deprecated)
+# حُذفت بقرار صاحب المشروع — وتبقى مسترجَعة من تاريخ Git عند الحاجة.
+
+# ── أرشيفات المشروع ══
+# ملاحظة: سياسة المشروع إرفاق قاعدة البيانات والأرشيفات في كل تسليم،
+# لذا لا نتجاهلها هنا — فقط الأرشيفات المكرّرة القديمة.
+project/winfeen-app.zip
+project/winfeen-design-v2.zip
+project/winfeen-app.tar.gz
+
+# ── ملفات مؤقتة ومحرّرات ──
+.DS_Store
+Thumbs.db
+*.log
+*.swp
+.idea/
+.vscode/
+__pycache__/
+*.pyc
+
+# ── أسرار لا تُتتبَّع ولا تُحزَّم ──
+# secret.key مفتاح توقيع الجلسات: من يملكه يزور رمز «مدير» بلا كلمة مرور.
+# لا يُرفع في Git ولا في أي أرشيف — token.php يولّد مفتاحاً جديداً لكل خادم.
+project/winfeen/api/storage/secret.key
+project/winfeen/api/storage/*.key
+
+# ── ملفات SQLite المؤقتة (WAL/SHM) ──
+*.sqlite-wal
+*.sqlite-shm
+*-wal
+*-shm
+
+# ── مفتاح توقيع الإصدار (release keystore) ──
+# أي ملف هنا يمنح من يحصل عليه القدرة على إصدار تحديثات موقّعة باسم التطبيق.
+# المجلد كله مستبعَد — ولو ضاع منه ملف واحد لأنشئت ثغرة صامتة.
+signing/

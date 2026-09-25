@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>الشريط العلوي — قبل وبعد</title>
+<style>
+  :root{
+    --accent:#3b82f6; --accent-dark:#2563eb;
+    --bg:#f8fafc; --card:#fff; --border:#e2e8f0;
+    --text:#0f172a; --muted:#64748b;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:"Segoe UI",Tahoma,sans-serif;background:var(--bg);color:var(--text);padding:28px}
+  h2{font-size:1rem;margin:0 0 12px;color:var(--muted);font-weight:700}
+  .demo{margin-bottom:34px}
+  .badge{display:inline-block;padding:3px 10px;border-radius:999px;font-size:.72rem;font-weight:800;margin-bottom:8px}
+  .badge--bad{background:#fee2e2;color:#b91c1c}
+  .badge--good{background:#dcfce7;color:#15803d}
+
+  .nav{
+    background:var(--card);border:1px solid var(--border);border-radius:12px;
+    height:64px;display:flex;align-items:center;justify-content:space-between;
+    padding:0 16px;box-shadow:0 1px 3px rgba(0,0,0,.06);gap:10px;direction:rtl;
+  }
+  .brand{display:flex;align-items:center;gap:8px;font-weight:800;color:var(--accent);font-size:1.05rem}
+  .mark{width:30px;height:30px;border-radius:9px;background:linear-gradient(135deg,var(--accent),var(--accent-dark));
+        display:grid;place-items:center;color:#fff}
+  .link{padding:7px 11px;border-radius:8px;color:var(--muted);font-size:.86rem;font-weight:600;display:flex;align-items:center;gap:5px}
+  .link.is-active{background:#eff6ff;color:var(--accent)}
+  .login{padding:7px 14px;border:1px solid var(--border);border-radius:8px;color:var(--muted);
+         font-size:.85rem;font-weight:600;display:flex;align-items:center;gap:5px}
+
+  /* ─── القسم الأوسط: التوازن الصحيح ─── */
+  .start{order:1;flex:1 1 0;display:flex;align-items:center;gap:6px}
+  .center{order:2;flex:0 0 auto;display:flex;align-items:center;justify-content:center;padding:0 8px}
+  .end{order:3;flex:1 1 0;display:flex;align-items:center;justify-content:flex-end;gap:8px}
+
+  .add{
+    display:inline-flex;align-items:center;gap:7px;height:36px;padding:0 18px;border-radius:999px;border:none;
+    background:linear-gradient(135deg,var(--accent) 0%,var(--accent-dark) 100%);color:#fff;
+    font-size:.86rem;font-weight:700;font-family:inherit;cursor:pointer;white-space:nowrap;
+    box-shadow:0 2px 6px rgba(37,99,235,.25),0 6px 16px rgba(37,99,235,.15);
+  }
+  /* ─── النسخة الخاطئة: order:0 يسبق الجميع ─── */
+  .nav--bad .center{order:0}
+
+  .axis{height:1px;background:repeating-linear-gradient(90deg,var(--accent) 0 4px,transparent 4px 8px);margin:6px 0 0;opacity:.35}
+  .note{font-size:.78rem;color:var(--muted);margin-top:7px;line-height:1.7}
+  code{background:#f1f5f9;padding:2px 6px;border-radius:5px;font-size:.76rem;direction:ltr;display:inline-block}
+</style>
+</head>
+<body>
+
+<div class="demo">
+  <span class="badge badge--bad">✗ قبل — ما أبلغتَ عنه</span>
+  <div class="nav nav--bad">
+    <div class="start">
+      <span class="brand"><span class="mark">◈</span> دليل الدير</span>
+      <span class="link is-active">⌂ الرئيسية</span>
+    </div>
+    <div class="center"><button class="add">＋ أضف خدمة</button></div>
+    <div class="end"><span class="login">👤 دخول</span></div>
+  </div>
+  <div class="axis"></div>
+  <p class="note">
+    <code>.site-nav__center</code> بلا <code>order</code> → قيمته الافتراضية <code>0</code>،
+    فيسبق <code>__start</code> (order:1) ويظهر <strong>أقصى اليمين</strong>،
+    وينزلق «الرئيسية» إلى الوسط.
+  </p>
+</div>
+
+<div class="demo">
+  <span class="badge badge--good">✓ بعد — الترتيب الصحيح</span>
+  <div class="nav">
+    <div class="start">
+      <span class="brand"><span class="mark">◈</span> دليل الدير</span>
+      <span class="link is-active">⌂ الرئيسية</span>
+    </div>
+    <div class="center"><button class="add">＋ أضف خدمة</button></div>
+    <div class="end"><span class="login">👤 دخول</span></div>
+  </div>
+  <div class="axis"></div>
+  <p class="note">
+    <code>__start: order 1 · flex 1</code> ← يمين &nbsp;·&nbsp;
+    <code>__center: order 2 · flex 0</code> ← وسط &nbsp;·&nbsp;
+    <code>__right: order 3 · flex 1</code> ← يسار<br>
+    الجانبان يتمددان بالتساوي فيبقى الزر <strong>مثبّتاً في المنتصف تماماً</strong> مهما طال اسم الموقع.
+  </p>
+</div>
+
+<div class="demo">
+  <span class="badge badge--good">✓ أندرويد — نفس المنطق</span>
+  <div class="nav">
+    <div class="start"><span class="brand"><span class="mark">◈</span> دليل الدير</span></div>
+    <div class="center"><button class="add">＋ أضف خدمة</button></div>
+    <div class="end"><span class="login">⟳</span></div>
+  </div>
+  <div class="axis"></div>
+  <p class="note">
+    <code>Expanded</code> على الجانبين و<code>DynamicFields</code> ثابت بينهما —
+    نفس نتيجة الويب بالضبط، ومُختبَر بقياس الإحداثيات.
+  </p>
+</div>
+
+<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a405f05a3fe7064e',t:'MTc5MDI5NjQyMQ=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+</html>

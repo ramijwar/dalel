@@ -1,0 +1,73 @@
+# .htaccess لتطبيق دليل الدير
+# يُوضع في نفس مجلد router.php
+
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+
+  # ══════════════════════════════════════════════════════════════════
+  #  🔴 قواعد الحماية — يجب أن تسبق قاعدة خدمة الملفات الحقيقية
+  # ══════════════════════════════════════════════════════════════════
+  #  كانت القاعدة رقم ١ تسمح بخدمة أي ملف موجود على القرص مباشرةً،
+  #  فكان أي زائر يستطيع تنزيل قاعدة البيانات ومفتاح الجلسات، أو تشغيل
+  #  سكربتات الصيانة التي تمحو الموقع. هذه القواعد تغلق ذلك (403).
+  # ══════════════════════════════════════════════════════════════════
+
+  # ١. مجلد التخزين: قاعدة البيانات · مفتاح الجلسات · النسخ الاحتياطية
+  RewriteRule ^api/storage(/.*)?$ - [F,L]
+
+  # ٢. سكربتات الصيانة (تحذف البيانات) — لا تُشغَّل عبر الويب
+  #    النمط السابق كان (install|seed|migrate_fields)\.php$ ولم يكن يطابق
+  #    migrate_fields_v2.php ولا set_password.php (كلاهما يحمي نفسه برمجياً،
+  #    لكن الحجب هنا طبقة أمان إضافية لا تعتمد على كود PHP).
+  RewriteRule ^api/(install|seed|migrate_fields[^/]*|set_password)\.php$ - [F,L]
+
+  # ٣. أي ملف بامتداد حسّاس في أي مكان
+  RewriteRule \.(sqlite|sqlite3|db|key|bak|backup|sql)$ - [F,L]
+
+  # ٤. الملفات المخفية (مثل secret.key و .git) عدا .well-known
+  RewriteRule (^|/)\.(?!well-known) - [F,L]
+
+  # ٥. ملفات APK تُخدَم بنوعها الصحيح (ليعرفها أندرويد كحزمة تثبيت)
+  <IfModule mod_mime.c>
+    AddType application/vnd.android.package-archive .apk
+  </IfModule>
+
+  # ══════════════════════════════════════════════════════════════════
+
+  # 0. المسار الجذري للتطبيق → router.php
+  #    (لحقن <base href> ومنع تخزين index.html في الكاش)
+  RewriteRule ^$ router.php [L,QSA]
+
+  # 1. السماح بالملفات الحقيقية الموجودة مسبقاً
+  RewriteCond %{REQUEST_FILENAME} -f [OR]
+  RewriteCond %{REQUEST_FILENAME} -d
+  RewriteRule ^ - [L]
+
+  # 2. السماح بطلبات API (يُعالجها router.php)
+  RewriteRule ^api/ router.php [L,QSA]
+
+  # 3. السماح بالصور المرفوعة
+  RewriteRule ^uploads/ router.php [L,QSA]
+
+  # 4. كل شيء آخر → SPA fallback (router.php يعيد index.html)
+  RewriteRule ^ router.php [L,QSA]
+</IfModule>
+
+# منع تصفح المجلدات
+Options -Indexes
+
+# ضغط Gzip
+<IfModule mod_deflate.c>
+  AddOutputFilterByType DEFLATE text/html text/css application/javascript application/json image/svg+xml
+</IfModule>
+
+# تخزين الملفات الثابتة
+<IfModule mod_expires.c>
+  ExpiresActive On
+  ExpiresByType text/css "access plus 1 year"
+  ExpiresByType application/javascript "access plus 1 year"
+  ExpiresByType image/png "access plus 1 year"
+  ExpiresByType image/jpeg "access plus 1 year"
+  ExpiresByType image/webp "access plus 1 year"
+  ExpiresByType image/svg+xml "access plus 1 year"
+</IfModule>

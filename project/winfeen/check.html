@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>فحص تطبيق دليل الدير</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Tajawal', 'Segoe UI', Tahoma, sans-serif;
+    background: #f0f4f8; color: #1e293b; line-height: 1.7;
+    padding: 20px; direction: rtl;
+  }
+  .box { max-width: 760px; margin: 0 auto; }
+  h1 { font-size: 1.3rem; color: #2563eb; margin-bottom: 6px; }
+  .sub { color: #64748b; font-size: .88rem; margin-bottom: 20px; }
+  .card {
+    background: #fff; border: 1px solid #d1d9e6; border-radius: 12px;
+    padding: 16px; margin-bottom: 14px; box-shadow: 0 1px 3px rgba(0,0,0,.06);
+  }
+  .row { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid #eef2f7; }
+  .row:last-child { border-bottom: none; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; background: #cbd5e1; flex: none; }
+  .dot.ok { background: #10b981; }
+  .dot.bad { background: #ef4444; }
+  .dot.warn { background: #f59e0b; }
+  .label { font-weight: 700; font-size: .9rem; min-width: 150px; }
+  .val { font-size: .85rem; color: #475569; flex: 1; word-break: break-all; }
+  pre {
+    background: #0f172a; color: #e2e8f0; padding: 12px; border-radius: 8px;
+    font-size: .74rem; overflow-x: auto; max-height: 180px; margin-top: 8px;
+    font-family: ui-monospace, monospace; white-space: pre-wrap; word-break: break-all;
+  }
+  .hint {
+    background: #fffbeb; border: 1px solid #fde68a; border-radius: 8px;
+    padding: 12px; margin-top: 10px; font-size: .85rem; color: #92400e;
+  }
+  .hint.good { background: #ecfdf5; border-color: #a7f3d0; color: #065f46; }
+  .hint code { background: rgba(0,0,0,.06); padding: 2px 6px; border-radius: 4px; font-size: .8rem; }
+  .btn {
+    display: inline-flex; align-items: center; gap: 6px; padding: 9px 18px;
+    background: #3b82f6; color: #fff; border: none; border-radius: 8px;
+    font-size: .88rem; font-weight: 700; cursor: pointer; font-family: inherit;
+  }
+  .btn:hover { background: #2563eb; }
+</style>
+</head>
+<body>
+<div class="box">
+  <h1>🔍 فحص تطبيق «دليل الدير»</h1>
+  <p class="sub">تتحقق هذه الصفحة من أن الواجهة والـ API يعملان بشكل صحيح على خادمك.</p>
+
+  <div class="card" id="info">
+    <div class="row"><span class="dot" id="d-base"></span><span class="label">مسار التطبيق</span><span class="val" id="v-base">…</span></div>
+    <div class="row"><span class="dot" id="d-health"></span><span class="label">/api/health</span><span class="val" id="v-health">…</span></div>
+    <div class="row"><span class="dot" id="d-meta"></span><span class="label">/api/meta</span><span class="val" id="v-meta">…</span></div>
+    <div class="row"><span class="dot" id="d-home"></span><span class="label">/api/home</span><span class="val" id="v-home">…</span></div>
+    <div class="row"><span class="dot" id="d-login"></span><span class="label">/api/auth/login</span><span class="val" id="v-login">…</span></div>
+    <div class="row"><span class="dot" id="d-dbsec"></span><span class="label">🔒 سرية قاعدة البيانات</span><span class="val" id="v-dbsec">…</span></div>
+    <div class="row"><span class="dot" id="d-keysec"></span><span class="label">🔒 سرية مفتاح الجلسات</span><span class="val" id="v-keysec">…</span></div>
+  </div>
+
+  <div class="card">
+    <strong style="font-size:.95rem">الرد الخام من /api/health</strong>
+    <pre id="raw">جارٍ الفحص…</pre>
+  </div>
+
+  <div id="verdict"></div>
+
+  <button class="btn" onclick="location.reload()">🔄 إعادة الفحص</button>
+</div>
+
+<script>
+// اكتشاف مسار التطبيق من رابط هذه الصفحة
+var here = location.pathname.replace(/\/check\.html?$/, '');
+var base = here.replace(/\/+$/, '');
+
+function set(id, ok, text) {
+  document.getElementById('d-' + id).className = 'dot ' + (ok === true ? 'ok' : ok === false ? 'bad' : 'warn');
+  document.getElementById('v-' + id).textContent = text;
+}
+
+set('base', true, base || '(الجذر)');
+
+async function probe(id, path, opts) {
+  try {
+    var res = await fetch(base + path, opts);
+    var txt = await res.text();
+    var isJson = false, data = null;
+    try { data = JSON.parse(txt); isJson = true; } catch (e) {}
+    return { res: res, txt: txt, isJson: isJson, data: data };
+  } catch (e) {
+    return { error: e.message };
+  }
+}
+
+(async function () {
+  // 1) health
+  var h = await probe('health', '/api/health');
+  document.getElementById('raw').textContent =
+    h.error ? 'خطأ شبكة: ' + h.error
+            : 'HTTP ' + h.res.status + '\nContent-Type: ' + (h.res.headers.get('content-type') || '؟') + '\n\n' + h.txt.slice(0, 600);
+
+  if (h.error) {
+    set('health', false, 'فشل الاتصال: ' + h.error);
+  } else if (!h.isJson) {
+    set('health', false, 'يُرجع HTML بدل JSON (HTTP ' + h.res.status + ') — الـ API مُعترض!');
+  } else {
+    set('health', true, 'يعمل — ' + (h.data.app || 'ok'));
+  }
+
+  // 2) meta
+  var m = await probe('meta', '/api/meta');
+  if (!m.error && m.isJson && m.data && m.data.ok) {
+    set('meta', true, (m.data.categories || []).length + ' تصنيف، ' + (m.data.regions || []).length + ' منطقة');
+  } else {
+    set('meta', false, m.error ? m.error : (m.isJson ? 'الرد ليس ok' : 'يُرجع HTML — الـ API مُعترض'));
+  }
+
+  // 3) home
+  var hm = await probe('home', '/api/home');
+  if (!hm.error && hm.isJson && hm.data && hm.data.ok) {
+    var c = hm.data.counts || {}, total = 0;
+    for (var k in c) total += c[k];
+    set('home', true, total + ' خدمة — ' + JSON.stringify(c));
+  } else {
+    set('home', false, hm.error ? hm.error : (hm.isJson ? 'الرد ليس ok' : 'يُرجع HTML — الـ API مُعترض'));
+  }
+
+  // 4) login
+  var lg = await probe('login', '/api/auth/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ phone: '0991000001', password: 'admin123' })
+  });
+  if (!lg.error && lg.isJson && lg.data && lg.data.ok) {
+    set('login', true, 'تسجيل الدخول يعمل ✓');
+  } else {
+    set('login', false, lg.error ? lg.error : (lg.isJson ? JSON.stringify(lg.data).slice(0, 90) : 'يُرجع HTML — الـ API مُعترض'));
+  }
+
+  // 5) 🔒 فحص أمني: هل قاعدة البيانات قابلة للتنزيل؟
+  //    لو أعادت SQLite magic فإن أي زائر يستطيع تنزيل كل البيانات
+  //    (هاشات كلمات المرور وأرقام الهاتف) — ثغرة حرجة.
+  var db = await probe('dbsec', '/api/storage/app.sqlite');
+  var dbLeaked = false, dbWhy = '';
+  if (db.error) {
+    set('dbsec', null, 'تعذّر الفحص: ' + db.error);
+  } else if (db.txt.indexOf('SQLite format 3') === 0) {
+    dbLeaked = true;
+    set('dbsec', false, '🔴 خطر! قاعدة البيانات متاحة للتنزيل (' + db.res.status + ' — ' + db.txt.length + ' بايت)');
+  } else {
+    set('dbsec', true, 'محمية ✓ (HTTP ' + db.res.status + ')');
+  }
+
+  // 6) 🔒 فحص أمني: هل مفتاح توقيع الجلسات مكشوف؟
+  //    انكشافه يسمح بتزوير رمز دخول بدور «مدير» والدخول دون كلمة مرور.
+  var ky = await probe('keysec', '/api/storage/secret.key');
+  var keyLeaked = false;
+  if (ky.error) {
+    set('keysec', null, 'تعذّر الفحص: ' + ky.error);
+  } else if (ky.res.status === 200 && /^[0-9a-f]{32,}$/i.test(ky.txt.trim())) {
+    keyLeaked = true;
+    set('keysec', false, '🔴 خطر! مفتاح الجلسات مكشوف — يمكن تزوير جلسة مدير');
+  } else {
+    set('keysec', true, 'محمي ✓ (HTTP ' + ky.res.status + ')');
+  }
+
+  // الحكم النهائي
+  var hijacked = (h && !h.error && !h.isJson);
+  var v = document.getElementById('verdict');
+
+  // الأولوية القصوى: الثغرات الأمنية تسبق أي شيء آخر
+  if (dbLeaked || keyLeaked) {
+    v.innerHTML = '<div class="hint" style="background:#fef2f2;border-color:#fca5a5;color:#991b1b">'
+      + '<strong>🔴 ثغرة أمنية حرجة — عالجها فورًا</strong><br><br>'
+      + (keyLeaked ? '• <strong>مفتاح الجلسات</strong> <code>api/storage/secret.key</code> متاح للتنزيل العام.'
+                   + ' من يحصل عليه يستطيع تزوير رمز دخول بحساب <strong>المدير</strong> والدخول بصلاحيات كاملة دون كلمة مرور.<br>' : '')
+      + (dbLeaked ? '• <strong>قاعدة البيانات</strong> <code>api/storage/app.sqlite</code> متاحة للتنزيل العام.'
+                  + ' تحتوي كل أرقام الهاتف وهاشات كلمات المرور وبيانات المستخدمين.<br>' : '')
+      + '<br><strong>الحل:</strong> تأكد من وجود ملف <code>api/storage/.htaccess</code> مع '
+      + '<code>Require all denied</code>، ومن القواعد الأمنية في أعلى <code>.htaccess</code> الجذري.'
+      + '<br>على <strong>Nginx</strong> أضِف: <code style="display:block;margin-top:8px;padding:10px;background:#0f172a;color:#e2e8f0;direction:ltr">location ~ ^/api/(storage|\\.) { deny all; return 404; }</code>'
+      + '<br><br><strong>ثم بعد الإصلاح:</strong> بدّل ملف <code>secret.key</code> وحاذِف ما بعده، '
+      + '<strong>وغيّر كلمة مرور المدير</strong> — فمن المحتمل أن المفتاح سُرِب فعلاً.'
+      + '</div>';
+  } else if (hijacked) {
+    v.innerHTML = '<div class="hint"><strong>⚠️ المشكلة: الـ API مُعترض من ملف .htaccess في جذر الموقع.</strong>'
+      + '<br>الطلبات إلى <code>/winfeen/api/...</code> تُحوَّل إلى واجهة Tijarti بدل تطبيق وين في.'
+      + '<br><br><strong>الحل:</strong> أضف هذا السطر في <strong>أعلى</strong> ملف <code>public_html/.htaccess</code> (ملف الجذر، وليس مجلد winfeen):'
+      + '<br><code style="display:block;margin-top:8px;padding:10px;background:#0f172a;color:#e2e8f0;direction:ltr">RewriteRule ^winfeen(?:/|$) - [L]</code>'
+      + '<br><br>ثم أعد تحميل هذه الصفحة.</div>';
+  } else if (!m.error && m.isJson && (m.data || {}).ok) {
+    v.innerHTML = '<div class="hint good"><strong>✅ كل شيء يعمل بشكل صحيح.</strong>'
+      + '<br>إذا كانت الصفحة الرئيسية لا تزال لا تعرض البيانات، فالمشكلة في الكاش: افتح التطبيق واضغط <code>Ctrl+F5</code> أو امسح كاش المتصفح.</div>';
+  } else {
+    v.innerHTML = '<div class="hint"><strong>⚠️ تعذّر الوصول إلى الـ API.</strong>'
+      + '<br>تأكد من أن مجلد التطبيق يحتوي على ملف <code>router.php</code> وأن <code>mod_rewrite</code> مفعّل على الخادم.</div>';
+  }
+})();
+</script></body>
+</html>

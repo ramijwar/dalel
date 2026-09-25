@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>معاينة — صف خيارات القائمة في نموذج القسم (قبل/بعد)</title>
+<style>
+  :root {
+    --bg:#f6f8fb; --bg2:#fff; --surface:#fff; --border:#e6eaf0; --border-light:#eef1f5;
+    --muted:#6b7280; --text:#1f2937; --text2:#6b7280; --primary:#0ea5e9;
+    --primary-soft:#e0f2fe; --danger:#dc2626; --radius:10px; --radius-sm:8px;
+    --font:'Tajawal','Cairo',system-ui,-apple-system,'Segoe UI',sans-serif;
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font-family:var(--font); padding:20px; }
+  h1 { font-size:1.2rem; margin:0 0 6px; }
+  .sub { color:var(--text2); font-size:.88rem; margin:0 0 16px; line-height:1.9; }
+  .wrap { display:flex; flex-wrap:wrap; gap:18px; align-items:flex-start; }
+  .card { background:var(--bg2); border:1px solid var(--border); border-radius:14px; padding:14px;
+          box-shadow:0 6px 18px rgba(15,23,42,.05); }
+  .card > h2 { font-size:.95rem; margin:0 0 10px; display:flex; align-items:center; gap:8px; }
+  .tag { font-size:.7rem; font-weight:800; padding:2px 8px; border-radius:999px; }
+  .tag--before { background:#fee2e2; color:#b91c1c; }
+  .tag--after  { background:#dcfce7; color:#15803d; }
+  .panel { resize:horizontal; overflow:auto; border:1px dashed var(--border); border-radius:12px;
+           padding:12px; background:var(--surface); }
+  .panel--narrow { width:360px; max-width:100%; }
+  .panel--wide { width:640px; max-width:100%; }
+  .hint { font-size:.78rem; color:var(--muted); margin-top:8px; line-height:1.8; }
+
+  /* ═══ أنماط الصفحة الحقيقية (منقولة حرفياً من app.css) ═══ */
+  .inp { width:100%; padding:10px 12px; border:1px solid var(--border); border-radius:var(--radius-sm);
+         font-size:.9rem; font-family:var(--font); background:var(--bg2); color:var(--text); }
+  .inp--sm { padding:7px 9px; font-size:13px; }
+  .btn { border:1px solid var(--border); background:var(--bg2); border-radius:var(--radius-sm);
+         padding:7px 10px; cursor:pointer; font-family:var(--font); color:var(--text2); }
+  .btn--danger { color:var(--danger); border-color:#fecaca; background:#fef2f2; }
+  .fb__options { display:grid; gap:7px; padding-top:4px; border-top:1px dashed #e5e9ef; }
+  .fb__options-head { font-size:12px; font-weight:700; color:var(--muted); display:flex; align-items:center; gap:5px; }
+
+  /* ── قبل: شبكة بأعمدة + قاعدة السحق عند العرض الضيّق ── */
+  .before .fb__opt { display:grid; grid-template-columns:26px 108px 1fr 96px 28px; gap:6px; align-items:center; }
+  .before .fb__opt-icon { display:grid; place-items:center; color:var(--primary); }
+  /* قاعدة @media الحقيقية التي كانت تسحق الصف */
+  .before .fb__opt-narrow-demo .fb__opt { grid-template-columns:24px 1fr 26px; }
+  .before .fb__opt-narrow-demo .fb__opt-val { display:none; }
+
+  /* ── بعد: صف مرن (القاعدة الجديدة من app.css) ── */
+  .after .fb__opt { display:flex; flex-wrap:wrap; align-items:center; gap:6px; }
+  .after .fb__opt > .fb__opt-icon { flex:0 0 22px; display:grid; place-items:center; color:var(--primary); }
+  .after .fb__opt > input { flex:1 1 150px; width:auto; min-width:0; }
+  .after .fb__opt > .btn { flex:0 0 auto; }
+  .after .fb__opt--head { margin-bottom:2px; }
+  .after .fb__opt--head > span { flex:1 1 150px; font-size:11.5px; font-weight:700; color:var(--muted); }
+  .after .fb__opt--head > .fb__opt-icon { flex:0 0 22px; }
+
+  /* ═══ الجداول ═══ */
+  table.admin-table { width:100%; border-collapse:collapse; font-size:.85rem; background:var(--bg2); }
+  .admin-table th { background:var(--bg); padding:10px 12px; text-align:right; font-weight:600;
+                    color:var(--text2); border-bottom:1px solid var(--border); white-space:nowrap; }
+  .admin-table td { padding:10px 12px; border-bottom:1px solid var(--border-light); vertical-align:middle;
+                    overflow-wrap:normal; word-break:normal; }   /* الجديد */
+  .admin-table--pick td, .admin-table--pick th { white-space:nowrap; }
+  .admin-table--broken td { overflow-wrap:anywhere; }             /* القديم — للتوضيح فقط */
+  .admin-table-scroll { overflow-x:auto; border:1px solid var(--border); border-radius:var(--radius); }
+</style>
+</head>
+<body>
+  <h1>صف خيارات القائمة في «حقول ميزة الحقول الإضافية» — قبل/بعد</h1>
+  <p class="sub">
+    المشكلة: عند اختيار نوع الحقل «قائمة اختيار» كانت حقول الخيارات (اسم الأيقونة · اسم
+    الخيار · القيمة) تظهر بأطوال غير متجانسة — وحقلٌ يظهر منه حرف واحد أو أقل عند عرض
+    ضيّق، لأن قاعدة <code>@media (max-width:640px)</code> كانت تسحق الصف إلى ثلاثة أعمدة
+    وتخفي «القيمة». الحل: صف مرن — كل حقل ١٥٠px على الأقل، وينزل إلى سطر كامل إن ضاق
+    المكان، مع سطر عناوين يوضّح دور كل حقل.
+  </p>
+
+  <div class="wrap">
+    <div class="card before" style="width:100%; max-width:720px">
+      <h2>قبل <span class="tag tag--before">حقل بعرض حرف واحد</span></h2>
+      <div class="panel panel--narrow fb__opt-narrow-demo">
+        <div class="fb__options">
+          <div class="fb__options-head">☰ خيارات القائمة (3)</div>
+          <div class="fb__opt">
+            <span class="fb__opt-icon">◉</span>
+            <input class="inp inp--sm" dir="ltr" value="stethoscope" />
+            <input class="inp inp--sm" value="أمراض قلبية" />
+            <input class="inp inp--sm fb__opt-val" dir="ltr" value="5" />
+            <button class="btn btn--danger" type="button">✕</button>
+          </div>
+          <div class="fb__opt">
+            <span class="fb__opt-icon">◉</span>
+            <input class="inp inp--sm" dir="ltr" value="baby" />
+            <input class="inp inp--sm" value="أطفال وحديثي الولادة" />
+            <input class="inp inp--sm fb__opt-val" dir="ltr" value="1" />
+            <button class="btn btn--danger" type="button">✕</button>
+          </div>
+        </div>
+      </div>
+      <p class="hint">
+        العرض ٣٦٠px (أو أي نافذة أضيق من ٦٤٠px): الصف صار ثلاثة أعمدة (٢٤px · ١fr · ٢٦px)
+        لخمسة عناصر و«القيمة» مخفية ⇒ «اسم الخيار» يقع في عمود ٢٦px فيظهر منه حرف واحد،
+        والعنصر الأخير ينزل سطراً وحده. <b>جرّب تصغير/تكبير اللوحة</b> — تُظهر المشكلة.
+      </p>
+    </div>
+
+    <div class="card after" style="width:100%; max-width:720px">
+      <h2>بعد <span class="tag tag--after">كل حقل ظاهر كاملاً</span></h2>
+      <div class="panel panel--narrow">
+        <div class="fb__options">
+          <div class="fb__options-head">☰ خيارات القائمة (3)</div>
+          <div class="fb__opt fb__opt--head" aria-hidden="true">
+            <span class="fb__opt-icon"></span>
+            <span>اسم الأيقونة</span>
+            <span>اسم الخيار</span>
+            <span>القيمة (اختياري)</span>
+            <span style="flex:0 0 28px"></span>
+          </div>
+          <div class="fb__opt">
+            <span class="fb__opt-icon">◉</span>
+            <input class="inp inp--sm" dir="ltr" value="stethoscope" />
+            <input class="inp inp--sm" value="أمراض قلبية" />
+            <input class="inp inp--sm" dir="ltr" value="5" />
+            <button class="btn btn--danger" type="button">✕</button>
+          </div>
+          <div class="fb__opt">
+            <span class="fb__opt-icon">◉</span>
+            <input class="inp inp--sm" dir="ltr" value="baby" />
+            <input class="inp inp--sm" value="أطفال وحديثي الولادة" />
+            <input class="inp inp--sm" dir="ltr" value="1" />
+            <button class="btn btn--danger" type="button">✕</button>
+          </div>
+        </div>
+      </div>
+      <p class="hint">العرض الضيّق (٣٦٠px): الحقول تنزل إلى سطر كامل واحداً بعد الآخر، كلٌّ
+        بعرضه الكامل — لا حقل مبتور، ولا حقل مخفي.</p>
+
+      <div class="panel panel--wide" style="margin-top:12px">
+        <div class="fb__options">
+          <div class="fb__options-head">☰ خيارات القائمة (3) — العرض الكامل للنافذة (٩٠٠px)</div>
+          <div class="fb__opt fb__opt--head" aria-hidden="true">
+            <span class="fb__opt-icon"></span>
+            <span>اسم الأيقونة</span>
+            <span>اسم الخيار</span>
+            <span>القيمة (اختياري)</span>
+            <span style="flex:0 0 28px"></span>
+          </div>
+          <div class="fb__opt">
+            <span class="fb__opt-icon">◉</span>
+            <input class="inp inp--sm" dir="ltr" value="stethoscope" />
+            <input class="inp inp--sm" value="أمراض قلبية" />
+            <input class="inp inp--sm" dir="ltr" value="5" />
+            <button class="btn btn--danger" type="button">✕</button>
+          </div>
+          <div class="fb__opt">
+            <span class="fb__opt-icon">◉</span>
+            <input class="inp inp--sm" dir="ltr" value="baby" />
+            <input class="inp inp--sm" value="أطفال وحديثي الولادة" />
+            <input class="inp inp--sm" dir="ltr" value="1" />
+            <button class="btn btn--danger" type="button">✕</button>
+          </div>
+        </div>
+      </div>
+      <p class="hint">العرض الكامل: الحقول الثلاثة <b>متساوية الطول</b> (تنمو بالتساوي) وبعناوين
+        واضحة فوقها.</p>
+    </div>
+
+    <div class="card" style="width:100%; max-width:720px">
+      <h2>الجداول <span class="tag tag--before">القديم: كلمات مقطّعة</span>
+                   <span class="tag tag--after">الجديد: نص سليم</span></h2>
+      <p class="hint" style="margin:0 0 8px">«فلاتر قسم» داخل النافذة — الجدول يُمرَّر أفقياً،
+        والكلمات لا تُقطع.</p>
+      <div class="wrap">
+        <div style="flex:1 1 300px">
+          <p class="hint" style="margin:0 0 4px">قبل (overflow-wrap: anywhere)</p>
+          <div class="admin-table-scroll">
+            <table class="admin-table admin-table--pick admin-table--broken">
+              <thead><tr><th>إسناد</th><th>الفلتر</th><th>المصدر</th></tr></thead>
+              <tbody>
+                <tr><td>☑</td><td>الاختصاص</td><td>حقل: specialty</td></tr>
+                <tr><td>☐</td><td>نوع المركبة</td><td>حقل: vehicle</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div style="flex:1 1 300px">
+          <p class="hint" style="margin:0 0 4px">بعد (نص عادي + تمرير)</p>
+          <div class="admin-table-scroll">
+            <table class="admin-table admin-table--pick">
+              <thead><tr><th>إسناد</th><th>الفلتر</th><th>المصدر</th></tr></thead>
+              <tbody>
+                <tr><td>☑</td><td>الاختصاص</td><td>حقل: specialty</td></tr>
+                <tr><td>☐</td><td>نوع المركبة</td><td>حقل: vehicle</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+      <p class="hint">لإظهار الفرق في «قبل»، ضيّق اللوحة بعرضٍ صغير (اسحب حافة اللوحة) —
+        فتبدأ الكلمات بالانقسام في المنتصف، بخلاف «بعد» الذي يمرّر الجدول أفقياً.</p>
+    </div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="ar" dir="rtl"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>الرئيسية — قبل/بعد (تصفّح الأقسام)</title>
+<style>
+  :root { color-scheme: light; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #eef2f7; font-family: system-ui, -apple-system, "Segoe UI", Tahoma, sans-serif; color: #0f172a; }
+  header { padding: 12px 16px; background: #0f172a; color: #fff; display: flex; flex-wrap: wrap; align-items: center; gap: 14px; position: sticky; top: 0; z-index: 9; }
+  header h1 { font-size: 1rem; margin: 0; font-weight: 700; }
+  header .ctrl { display: flex; align-items: center; gap: 8px; font-size: 0.85rem; }
+  input[type=range] { width: 210px; }
+  output { font-weight: 700; min-width: 62px; display: inline-block; }
+  .quick { display: flex; gap: 6px; }
+  .quick button { border: 1px solid #475569; background: #1e293b; color: #e2e8f0; border-radius: 8px; padding: 4px 10px; font-size: 0.8rem; cursor: pointer; }
+  .quick button:hover { background: #334155; }
+  .hint { font-size: 0.78rem; color: #cbd5e1; margin-inline-start: auto; }
+  .wrap { display: flex; gap: 14px; padding: 14px; align-items: flex-start; }
+  .panel { flex: 1 1 0; min-width: 0; background: #fff; border-radius: 14px; box-shadow: 0 6px 22px #0f172a1f; overflow: hidden; }
+  .panel > h2 { margin: 0; padding: 9px 14px; font-size: 0.85rem; display: flex; align-items: center; gap: 8px; }
+  .panel--before > h2 { background: #fee2e2; color: #991b1b; }
+  .panel--after  > h2 { background: #dcfce7; color: #166534; }
+  .panel > h2 span { font-weight: 400; font-size: 0.76rem; opacity: 0.85; }
+  .frame-box { padding: 0 0 12px; display: flex; justify-content: center; background: #f8fafc; }
+  iframe { border: 0; background: #fff; height: 1180px; box-shadow: 0 0 0 1px #cbd5e155; }
+  .ruler { text-align: center; font-size: 0.72rem; color: #64748b; padding: 6px 0 0; }
+</style></head>
+<body>
+<header>
+  <h1>الرئيسية قبل/بعد — إزالة قائمة «تصفّح الأقسام» وابقاء البطاقات</h1>
+  <div class="ctrl">
+    <label for="w">عرض الشاشة:</label>
+    <input id="w" type="range" min="320" max="900" step="5" value="600">
+    <output id="wo">600px</output>
+  </div>
+  <div class="quick">
+    <button data-w="360">جوال صغير 360</button>
+    <button data-w="412">جوال 412</button>
+    <button data-w="600">لوحي صغير 600</button>
+    <button data-w="768">لوحي 768</button>
+    <button data-w="900">سطح مكتب 900</button>
+  </div>
+  <span class="hint">لا حاجة للتمرير أفقياً — المتغيّر يشمل اللوحتين معاً</span>
+</header>
+<div class="wrap">
+  <div class="panel panel--before">
+    <h2>قبل <span>بطاقات + قسم «تصفّح الأقسام» بعناوينه وأوصافه (٦ بطاقات طويلة زائدة)</span></h2>
+    <div class="frame-box"><iframe id="f1" src="معاينة-الرئيسية-قبل.html" title="قبل"></iframe></div>
+  </div>
+  <div class="panel panel--after">
+    <h2>بعد <span>البطاقات فقط — القائمة أُزيلت تماماً، والصفحة أقصر بـ٦ بطاقات</span></h2>
+    <div class="frame-box"><iframe id="f2" src="معاينة-الرئيسية-بعد.html" title="بعد"></iframe></div>
+  </div>
+</div>
+<script>
+  const r = document.getElementById('w'), o = document.getElementById('wo');
+  const f1 = document.getElementById('f1'), f2 = document.getElementById('f2');
+  function apply(v) { v = Math.max(320, Math.min(900, +v)); r.value = v; o.textContent = v + 'px';
+    f1.style.width = v + 'px'; f2.style.width = v + 'px'; }
+  r.addEventListener('input', e => apply(e.target.value));
+  document.querySelectorAll('.quick button').forEach(b => b.addEventListener('click', () => apply(b.dataset.w)));
+  apply(600);
+</script>
+</body></html>

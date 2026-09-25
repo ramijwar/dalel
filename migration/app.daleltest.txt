@@ -1,0 +1,63 @@
+══════════════════════════════════════════════════════════════════
+  نقل بيانات dalel → قوالب daleltest   ·   2026-09-25 10:55
+══════════════════════════════════════════════════════════════════
+  dalel     (البيانات): /home/user/dalel/app.sqlite-dalel.txt
+  daleltest (القوالب) : /home/user/dalel/app.sqlite-daleltest.txt
+  الناتج              : /home/user/dalel/migration/app.daleltest.sqlite
+
+  التحقق من الملفين: dalel ✅   daleltest ✅   (المخطط متطابق تماماً)
+
+── ما نُقل من dalel ──
+   login_attempts               0
+   activity_log                93   (كان في daleltest: 28)
+   service_requests            11
+   service_status             404   (كان في daleltest: 392)
+   schedules                 3122   (كان في daleltest: 3048)
+   services                   404   (كان في daleltest: 392)
+   category_filters             8   (كان في daleltest: 5)
+   filters                      6   (كان في daleltest: 4)
+   category_field_options      37   (كان في daleltest: 33)
+   category_fields              6   (كان في daleltest: 14)
+   categories                   6   (كان في daleltest: 5)
+   regions                    158   (كان في daleltest: 158)
+   governorates                 2   (كان في daleltest: 2)
+   specialties                 20   (كان في daleltest: 20)
+   users                        9   (كان في daleltest: 2)
+   settings                    16 (بقيت)
+      إعدادات التحديث app_*: 10 بقيت
+
+── التحقق ──
+   سلامة الملف: ok ✅
+   مراجع أجنبية معلّقة: 0 ✅
+
+   ── مطابقة صفّاً بصفّ مع dalel ──
+      users                        9 صفاً  ✅
+      specialties                 20 صفاً  ✅
+      governorates                 2 صفاً  ✅
+      regions                    158 صفاً  ✅
+      categories                   6 صفاً  ✅
+      category_fields              6 صفاً  ✅
+      category_field_options      37 صفاً  ✅
+      filters                      6 صفاً  ✅
+      category_filters             8 صفاً  ✅
+      services                   404 صفاً  ✅
+      schedules                 3122 صفاً  ✅
+      service_status             404 صفاً  ✅
+      service_requests            11 صفاً  ✅
+      activity_log                93 صفاً  ✅
+      login_attempts               0 صفاً  ✅
+      ⇒ كل الجداول مطابقة لـ dalel ✅
+
+   ── لم تبقَ بيانات daleltest القديمة ──
+      خدمات كانت في daleltest فقط      0 ✅
+      أقسام ليست في dalel              0 ✅
+      مستخدمون ليسوا في dalel          0 ✅
+
+   ── الأقسام في الناتج ──
+      #37  pharmacies     صيدليات بشرية        نشط=1 · خدمات 247
+      #38  doctors        عيادات أطباء         نشط=1 · خدمات 152
+      #39  stations       كازيات               نشط=1 · خدمات 0
+      #40  transport      سرفيس واسعافية       نشط=1 · خدمات 2
+      #43  laboratory     المخابر              نشط=1 · خدمات 1
+      #44  hospitals      مشافي                نشط=1 · خدمات 2
+      المجموع: 404 خدمة · 158 منطقة · 9 مستخدم
