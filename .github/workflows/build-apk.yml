@@ -31,7 +31,9 @@ on:
       server_url:
         description: 'عنوان الخادم الذي يخاطبه التطبيق'
         required: false
-        default: 'https://t3lam.site/dalel'
+        # الحيّ حالياً هو /daleltest — و/dalel غير منشور بعد.
+        # بعد نشر الإنتاج: بدّل هذا السطر إلى https://t3lam.site/dalel
+        default: 'https://t3lam.site/daleltest'
       build_type:
         description: 'نوع البناء'
         required: true
