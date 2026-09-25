@@ -1016,9 +1016,17 @@ dialog.modal.modal--wide {
   padding: 10px 12px;
   border-bottom: 1px solid var(--border-light);
   vertical-align: middle;
-  /* داخل النوافذ الضيقة يلتفّ النص بدل أن يُقصّ (مصدر الفلتر مثلاً) */
-  overflow-wrap: anywhere;
+  /* ⚠ لا `overflow-wrap: anywhere` هنا: كان يقصّ الكلمات إلى أحرف في
+     الجداول الضيقة. الجداول تُمرَّر أفقياً بدلاً من ذلك (انظر .admin-table-scroll). */
+  overflow-wrap: normal;
+  word-break: normal;
 }
+
+/* جدول داخل نافذة منبثقة أو قسم ضيّق: يُمرَّر أفقياً بلا سحق الأعمدة */
+.admin-table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.admin-table-scroll > .admin-table { min-width: 100%; }
+/* جداول الاختيار داخل النوافذ: خلايا قصيرة ⇒ بلا لفّ لتبقى الأعمدة مستوية */
+.admin-table--pick td, .admin-table--pick th { white-space: nowrap; }
 
 .admin-table tr:last-child td { border-bottom: none; }
 .admin-table tr:hover { background: var(--accent-lighter); }
@@ -3275,13 +3283,31 @@ dialog.modal.modal--wide {
 
 .fb__options { display: grid; gap: 7px; padding-top: 4px; border-top: 1px dashed var(--border, #e5e9ef); }
 .fb__options-head { font-size: 12px; font-weight: 700; color: var(--muted, #6b7280); display: flex; align-items: center; gap: 5px; }
+/* ─── صف خيار القائمة ───
+   كان شبكة بأعمدة ثابتة، وقاعدة @media 640px تسحقها إلى ثلاثة أعمدة وتخفي
+   «القيمة» ⇒ يبقى حقل بعرض حرف واحد. الآن مرن: كل حقل ١٥٠px على الأقل،
+   وإن ضاقت النافذة ينزل الحقل إلى سطر كامل بدل أن يُضغط. */
 .fb__opt {
-  display: grid;
-  grid-template-columns:
-    26px minmax(90px, 1fr) minmax(140px, 1.8fr) minmax(78px, 1fr) 28px;
-  gap: 6px; align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
 }
-.fb__opt > * { min-width: 0; }
+.fb__opt > .fb__opt-icon { flex: 0 0 22px; display: grid; place-items: center; }
+.fb__opt > input {
+  flex: 1 1 150px;      /* ينمو بالتساوي، ولا يصغر عن ١٥٠px */
+  width: auto;
+  min-width: 0;
+}
+.fb__opt > .btn { flex: 0 0 auto; }
+
+/* سطر عناوين الأعمدة أعلى الخيارات — يوضّح دور كل حقل */
+.fb__opt--head { margin-bottom: 2px; }
+.fb__opt--head > span {
+  flex: 1 1 150px;
+  font-size: 11.5px; font-weight: 700; color: var(--muted, #6b7280);
+}
+.fb__opt--head > .fb__opt-icon { flex: 0 0 22px; }
 .fb__opt-icon { display: grid; place-items: center; color: var(--primary, #0ea5e9); }
 .fb__opt-icon-in { font-size: 12px; }
 .fb__opt-val { opacity: .75; }
@@ -3306,10 +3332,8 @@ dialog.modal.modal--wide {
 }
 .field-chip__text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-@media (max-width: 640px) {
-  .fb__opt { grid-template-columns: 24px 1fr 26px; }
-  .fb__opt-val { display: none; }
-}
+/* (أُزيلت قاعدة كانت تسحق صف الخيار إلى ٣ أعمدة وتخفي «القيمة» على الشاشات
+   الضيقة — وهي سبب ظهور حقل بعرض حرف واحد. التخطيط المرن يتولّى الأمر.) */
 
 /* ══════════════════════════════════════════════════════════════
    أيقونة نصية — احتياط لأيقونات الحقول الديناميكية

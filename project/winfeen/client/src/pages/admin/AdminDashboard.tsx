@@ -839,6 +839,7 @@ function CategoryFiltersForm({ cat, filters, onSaved }: { cat: Category; filters
         {chosen && Object.values(chosen).filter(Boolean).length > 1 && ' إسناد أكثر من فلتر يُضيف قائمة تصفية داخل شريط الصفحة.'}
       </p>
 
+      <div className="admin-table-scroll">
       <table className="admin-table admin-table--pick">
         <thead><tr><th>إسناد</th><th>أساسي</th><th>الفلتر</th><th>المصدر</th></tr></thead>
         <tbody>
@@ -862,6 +863,7 @@ function CategoryFiltersForm({ cat, filters, onSaved }: { cat: Category; filters
           ))}
         </tbody>
       </table>
+      </div>
 
       <div className="form-actions">
         <button className="btn btn--primary" onClick={save} disabled={busy}>{busy ? 'يحفظ…' : 'حفظ الفلاتر'}</button>

@@ -467,6 +467,17 @@ export function FieldsBuilder({ fields, onChange }: FieldsBuilderProps) {
                 </span>
               </div>
 
+              {f.options.length > 0 && (
+                /* عناوين الأعمدة — توضّح دور كل حقل في الصف تحته */
+                <div className="fb__opt fb__opt--head" aria-hidden="true">
+                  <span className="fb__opt-icon" />
+                  <span>اسم الأيقونة</span>
+                  <span>اسم الخيار</span>
+                  <span>القيمة (اختياري)</span>
+                  <span style={{ flex: '0 0 28px' }} />
+                </div>
+              )}
+
               {f.options.map((o) => (
                 <div className="fb__opt" key={o._uid}>
                   {/* أيقونة الخيار */}
