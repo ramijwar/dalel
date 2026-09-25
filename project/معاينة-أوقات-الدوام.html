@@ -106,12 +106,40 @@
         </div>
         <div class="row"><span style="width:15px">📍</span><span class="row__day">المنطقة</span><span class="row__val">ديرالزور — الحسكة</span></div>
         <div class="row"><span style="width:15px">🧠</span><span class="row__day">الاختصاص</span><span class="row__val">عصبية</span></div>
-        <div class="row"><span style="width:15px">#️⃣</span><span class="row__day">سعر المعاينة</span><span class="row__val">25,000 ل.س</span></div>
+        <div class="row"><span style="width:15px">💵</span><span class="row__day">سعر المعاينة</span><span class="row__val">25,000 ل.س</span></div>
       </div>
       <p class="kv" style="margin-top:10px">
         <span>قبل:</span> كل الحقول كانت تُرسم بأيقونة «الوسم» 🏷 وحدها، فتغيب أيقونة
         سعر المعاينة. <span>بعد:</span> تُرسم أيقونة الحقل القادمة من الخادم
-        (<code>icon: "hash"</code>)، والإيموجي يُعرض كما هو.
+        (<code>icon: "banknote"</code> للسعر · إيموجي الاختصاص كما هو).
+      </p>
+    </div>
+  </div>
+
+  <div class="wrap" style="margin-top:20px">
+    <div class="phone">
+      <h2>أيقونة السعر — قبل <span class="tag tag--before">hash نصًّا</span></h2>
+      <div class="card">
+        <div class="card__head"><span class="card__badge">ℹ️</span><span class="card__title">معلومات الخدمة</span></div>
+        <div class="row"><span style="width:15px">🏷</span><span class="row__day">سعر المعاينة</span><span class="row__val">25,000</span></div>
+      </div>
+      <p class="kv" style="margin-top:10px">
+        الخادم كان يعطي كل حقل رقمي <code>hash</code>، وخريطة الويب لا تضمّه
+        ⇒ كان يُطبع نصًّا «hash» بجانب القيمة (ومثله «type» للنصوص).
+      </p>
+    </div>
+
+    <div class="phone">
+      <h2>أيقونة السعر — بعد <span class="tag tag--after">banknote 💵</span></h2>
+      <div class="card">
+        <div class="card__head"><span class="card__badge">ℹ️</span><span class="card__title">معلومات الخدمة</span></div>
+        <div class="row"><span style="width:15px">💵</span><span class="row__day">سعر المعاينة</span><span class="row__val">25,000 ل.س</span></div>
+        <div class="row"><span style="width:15px">#</span><span class="row__day">عدد الأسرّة</span><span class="row__val">12</span></div>
+      </div>
+      <p class="kv" style="margin-top:10px">
+        <code>is_price_field()</code> تميّز السعر بالمفتاح أو الاسم العربي
+        (<code>price · cost · fare · سعر · تكلفة · أجرة …</code>) ⇒ 💵 للأسعار
+        و<code>#</code> لبقية الأرقام (عدد الأسرّة · الوزن).
       </p>
     </div>
   </div>
