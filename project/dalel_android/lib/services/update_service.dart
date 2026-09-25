@@ -44,6 +44,35 @@ class UpdateService extends ChangeNotifier {
   UpdateService._();
   static final UpdateService instance = UpdateService._();
 
+  /// نسخة مستقلة تُستخدم في الاختبارات وحدها: لا تلمس الشبكة ولا الملفات،
+  /// فحالتها تُضبط يدوياً بـ[debugSet] لفحص شكل الشريط في كل مرحلة.
+  @visibleForTesting
+  UpdateService.forTest();
+
+  /// ضبط الحالة للنظر في الشكل فقط — للاختبارات أيضاً.
+  @visibleForTesting
+  void debugSet({
+    AppUpdate? update,
+    bool clearUpdate = false,
+    UpdatePhase? phase,
+    String? error,
+    double? progress,
+    int? received,
+    int? total,
+    double? speed,
+    bool? dismissed,
+  }) {
+    _update = clearUpdate ? null : (update ?? _update);
+    if (phase != null) _phase = phase;
+    if (error != null) _error = error;
+    if (progress != null) _progress = progress;
+    if (received != null) _received = received;
+    if (total != null) _total = total;
+    if (speed != null) _speed = speed;
+    if (dismissed != null) _dismissed = dismissed;
+    notifyListeners();
+  }
+
   static const String apkMime = 'application/vnd.android.package-archive';
 
   final _api = ApiService.instance;
@@ -157,8 +186,14 @@ class UpdateService extends ChangeNotifier {
         _error = null;
         await _cleanOldFiles();
       } else {
+        // «لاحقاً» تبقى محترَمة للإصدار نفسه: إعادة سؤال الخادم (كلما
+        // دخل المستخدم تبويب «حسابي») لا تُعيد الشريط الذي أغلقه بيده.
+        // ويظهر من جديد فقط إن نُشر إصدار أحدث من الذي تجاهله.
+        final sameVersion = _update != null &&
+            _update!.versionCode == u.versionCode &&
+            _update!.versionName == u.versionName;
+        if (!sameVersion) _dismissed = false;
         _update = u;
-        _dismissed = false;
         // هل نُزِّل هذا الإصدار سابقاً (تنزيل مكتمل من جلسة سابقة)؟
         final ready = await _findDownloaded(u);
         _phase = ready ? UpdatePhase.downloaded : UpdatePhase.available;
