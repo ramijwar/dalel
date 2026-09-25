@@ -142,6 +142,81 @@ class ResolvedField {
       );
 }
 
+/* ══════════════════════════════════════════════════════════════
+ *  فلتر مُسنَد لقسم — من مكتبة الفلاتر في لوحة التحكم
+ *
+ *  المدير يُنشئ فلاتر (المناطق · الاختصاص · نوع المركبة …) ثم يُسنِد
+ *  لكل قسم الفلتر الذي تُعرض خدماته على أساسه. «الأساسي» هو الذي يبني
+ *  بطاقات المستوى الأول في صفحة القسم.
+ *
+ *  يُطابق `category.filters[]` في ردّ `/api/meta`، ومصدر قيمته:
+ *    region    → منطقة الخدمة (region_id)
+ *    specialty → اختصاص الخدمة (specialty_id)
+ *    field     → حقل من حقول القسم (source_key، من `meta`/`fields`)
+ * ══════════════════════════════════════════════════════════════ */
+class CategoryFilterLink {
+  /// معرّف الإسناد في جدول category_filters
+  final int id;
+
+  /// معرّف الفلتر في المكتبة
+  final int filterId;
+
+  /// مفتاح التجميع — يُطابق مفتاح `groups` في ردّ الخدمات
+  final String key;
+  final String label;
+
+  /// 'region' | 'specialty' | 'field'
+  final String sourceType;
+
+  /// مفتاح الحقل عندما يكون المصدر field
+  final String sourceKey;
+  final String icon;
+
+  /// الأساسي واحد لكل قسم — هو الذي يقود بطاقات المستوى الأول
+  final bool isPrimary;
+  final int sortOrder;
+
+  const CategoryFilterLink({
+    required this.id,
+    required this.filterId,
+    required this.key,
+    required this.label,
+    this.sourceType = 'region',
+    this.sourceKey = '',
+    this.icon = '',
+    this.isPrimary = false,
+    this.sortOrder = 0,
+  });
+
+  factory CategoryFilterLink.fromJson(Map<String, dynamic> j) => CategoryFilterLink(
+        id: _i(j['id']),
+        filterId: _i(j['filter_id'] ?? j['id']),
+        key: _s(j['key']),
+        label: _s(j['label']),
+        sourceType: _s(j['source_type']).isEmpty ? 'region' : _s(j['source_type']),
+        sourceKey: _s(j['source_key']),
+        icon: _s(j['icon']),
+        isPrimary: _b(j['is_primary']),
+        sortOrder: _i(j['sort_order']),
+      );
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'filter_id': filterId,
+        'key': key,
+        'label': label,
+        'source_type': sourceType,
+        'source_key': sourceKey,
+        'icon': icon,
+        'is_primary': isPrimary ? 1 : 0,
+        'sort_order': sortOrder,
+      };
+
+  bool get isRegion => sourceType == 'region';
+  bool get isSpecialty => sourceType == 'specialty';
+  bool get isField => sourceType == 'field';
+}
+
 class Category {
   final int id;
   final String slug;
@@ -156,6 +231,11 @@ class Category {
   final Map<String, dynamic> features;
   /// الحقول الخاصة بهذا القسم — تُبنى ديناميكياً في نماذج الخدمات
   final List<CategoryField> fields;
+
+  /// الفلاتر المُسنَدة لهذا القسم — من مكتبة الفلاتر في لوحة التحكم.
+  /// قد تكون فارغة (خادم قديم، أو قسم أُلغيت فلاتره عمداً) فيُستخدم
+  /// التجميع الاحتياطي المضمّن في التطبيق.
+  final List<CategoryFilterLink> filters;
   final bool isActive;
 
   Category({
@@ -171,6 +251,7 @@ class Category {
     this.layout = 'card',
     this.features = const {},
     this.fields = const [],
+    this.filters = const [],
     this.isActive = true,
   });
 
@@ -190,6 +271,10 @@ class Category {
             .whereType<Map<String, dynamic>>()
             .map(CategoryField.fromJson)
             .toList(),
+        filters: (j['filters'] as List? ?? [])
+            .whereType<Map<String, dynamic>>()
+            .map(CategoryFilterLink.fromJson)
+            .toList(),
         isActive: _b(j['is_active']),
       );
 
@@ -205,8 +290,22 @@ class Category {
         'sort_order': sortOrder,
         'layout': layout,
         'features': jsonEncode(features),
+        // يُخزَّن كنص JSON — يُقرأ في database_service عند العمل بلا شبكة
+        'filters': jsonEncode(filters.map((f) => f.toJson()).toList()),
         'is_active': isActive ? 1 : 0,
       };
+
+  /// الفلتر الأساسي — واحد فقط، وهو الذي يبني بطاقات المستوى الأول
+  CategoryFilterLink? get primaryFilter {
+    for (final f in filters) {
+      if (f.isPrimary) return f;
+    }
+    return null;
+  }
+
+  /// بقية الفلاتر المُسنَدة (تُعرض كفلاتر ثانوية تُضيّق النتائج)
+  List<CategoryFilterLink> get secondaryFilters =>
+      filters.where((f) => !f.isPrimary).toList();
 
   /// لون القسم من النص السداسي
   int get colorValue {

@@ -1,4 +1,4 @@
-import { DAY_NAMES, type Service } from './types'
+import { DAY_NAMES, type Category, type Service } from './types'
 
 /** تنسيق رقم بفواصل عربية-لاتينية */
 export function num(n: number | undefined | null): string {
@@ -152,4 +152,27 @@ export function copyText(text: string): Promise<void> {
     document.body.removeChild(ta)
     resolve()
   })
+}
+
+/**
+ * إيجاد قسم من الرابط — بالرمز أو بالمسار.
+ *
+ * ⚠️ لا تفترض أن `route` يساوي `slug`. الرابط في الرئيسية يُبنى من
+ * `c.route`، والمسار العام `/:slug` يمرّر الشريحة كما هي. قسم «المخابر»
+ * رمزه `laboratory` ومساره `/laboratories` — فالمطابقة بالرمز وحده تفشل،
+ * ويكون القسم مجهولاً فلا يُعرض فلتره ولا خدماته.
+ *
+ * الترتيب: الرمز أولاً (الأشيع)، ثم المسار بنزع الشرطة الأولى.
+ */
+export function findCategory(categories: Category[], slugOrPath: string): Category | undefined {
+  const key = (slugOrPath || '').replace(/^\/+|\/+$/g, '')
+  if (!key) return undefined
+  return categories.find((c) => c.slug === key)
+    ?? categories.find((c) => (c.route || '').replace(/^\/+|\/+$/g, '') === key)
+}
+
+/** رابط قسم للعرض — المسار إن وُجد وإلا الرمز */
+export function categoryPath(c: Pick<Category, 'slug' | 'route'>): string {
+  const route = (c.route || '').replace(/^\/+|\/+$/g, '')
+  return '/' + (route || c.slug)
 }

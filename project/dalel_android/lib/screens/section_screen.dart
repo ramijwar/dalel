@@ -39,6 +39,9 @@ class _SectionScreenState extends State<SectionScreen> {
   String _search = '';
   String? _groupKey;
 
+  /// قيم الفلاتر الثانوية المُسنَدة للقسم — مفتاح الفلتر ← القيمة المختارة
+  final Map<String, String> _secState = {};
+
   /// 'card' | 'list'
   late String _layout;
 
@@ -52,6 +55,58 @@ class _SectionScreenState extends State<SectionScreen> {
   final TextEditingController _searchCtrl = TextEditingController();
 
   SectionConfig get _info => SectionConfig.of(widget.category.slug);
+
+  /// ═══════════════ الفلاتر المُسنَدة من لوحة التحكم ═══════════════
+  /// المدير يُنشئ فلاتر في المكتبة (المناطق · الاختصاص · نوع المركبة …)
+  /// ثم يُسنِد لكل قسم فلتره الأساسي — وهو الذي يبني بطاقات المستوى الأول.
+  /// `null` تعني خادماً قديماً أو قسماً بلا فلاتر، فيُستخدم التجميع
+  /// الاحتياطي المضمّن في التطبيق (SectionConfig) بلا أي تراجع.
+  CategoryFilterLink? get _primaryFilter => widget.category.primaryFilter;
+  List<CategoryFilterLink> get _secondaryFilters => widget.category.secondaryFilters;
+
+  /// هل التجميع الأساسي على المناطق؟ (يُغيّر صياغة العنوان ورأس النتائج)
+  bool get _groupIsRegion {
+    final f = _primaryFilter;
+    if (f != null) return f.sourceType == 'region';
+    return _info.groupBy != 'specialty' && _info.groupBy != 'meta';
+  }
+
+  /// قيمة الخدمة في فلتر مُعطى — أساس التجميع والتطابق.
+  /// تعمل بالمنطقة أو الاختصاص أو أي حقل من حقول القسم (يقرأها من `meta`
+  /// كما يفعل الخادم، وتقع على `fields` المحلولة إن لم تكن في meta).
+  String _valueOf(Service s, CategoryFilterLink f) {
+    switch (f.sourceType) {
+      case 'specialty':
+        return s.specialtyId == null ? '' : '${s.specialtyId}';
+      case 'field':
+        final v = (s.meta[f.sourceKey] ?? '').toString().trim();
+        if (v.isNotEmpty) return v;
+        for (final rf in s.fields) {
+          if (rf.key == f.sourceKey) return rf.value.trim();
+        }
+        return '';
+      case 'region':
+      default:
+        return s.regionId == null ? '' : '${s.regionId}';
+    }
+  }
+
+  /// اسم اختصاص الخدمة — لا نعرض مُعرّفاً رقمياً خاماً أبداً
+  String _specialtyLabel(Service s) {
+    final raw = (s.meta['specialty_name'] ?? s.metaVal('specialty') ?? '')
+        .toString()
+        .trim();
+    final resolved = widget.category.fields
+        .where((f) => f.key == 'specialty')
+        .expand((f) => f.options)
+        .where((o) => o.value == raw || o.id.toString() == raw || o.label == raw)
+        .map((o) => o.label)
+        .firstOrNull;
+    if (resolved != null && resolved.isNotEmpty) return resolved;
+    // الاختصاص غير معروف — نُعيد التسمية الافتراضية بدل رقم خام
+    if (raw.isNotEmpty && !RegExp(r'^\d+$').hasMatch(raw)) return raw;
+    return 'عام';
+  }
 
   @override
   void initState() {
@@ -90,22 +145,33 @@ class _SectionScreenState extends State<SectionScreen> {
     }
   }
 
-  void _applyFilters() {
+  /// هل تجتاز الخدمة الفلاتر المُضيِّقة؟ (بلا فلتر المجموعة المختارة)
+  /// منطق واحد تستخدمه القائمة وبطاقات التجميع معاً — فلا تتباعد
+  /// أعداد البطاقات عن النتائج الفعلية.
+  bool _passes(Service s) {
+    if (_govId != null && s.governorateId != _govId) return false;
+    if (_zone != null && s.regionZone != _zone) return false;
+    if (_regionId != null && s.regionId != _regionId) return false;
+    if (_specialtyId != null && s.specialtyId != _specialtyId) return false;
+    if (_status == 'open' && !s.isOpen) return false;
+    if (_status == 'closed' && s.isOpen) return false;
+    if (_status == 'duty' && !s.onDuty) return false;
     final q = _search.trim().toLowerCase();
+    if (q.isNotEmpty &&
+        !s.name.toLowerCase().contains(q) &&
+        !s.address.toLowerCase().contains(q)) return false;
 
-    var list = _all.where((s) {
-      if (_govId != null && s.governorateId != _govId) return false;
-      if (_zone != null && s.regionZone != _zone) return false;
-      if (_regionId != null && s.regionId != _regionId) return false;
-      if (_specialtyId != null && s.specialtyId != _specialtyId) return false;
-      if (_status == 'open' && !s.isOpen) return false;
-      if (_status == 'closed' && s.isOpen) return false;
-      if (_status == 'duty' && !s.onDuty) return false;
-      if (q.isNotEmpty &&
-          !s.name.toLowerCase().contains(q) &&
-          !s.address.toLowerCase().contains(q)) return false;
-      return true;
-    }).toList();
+    // الفلاتر الثانوية التي أسنَدها المدير للقسم
+    for (final f in _secondaryFilters) {
+      final want = _secState[f.key];
+      if (want == null || want.isEmpty) continue;
+      if (_valueOf(s, f) != want) return false;
+    }
+    return true;
+  }
+
+  void _applyFilters() {
+    var list = _all.where(_passes).toList();
 
     // فلترة المجموعة المختارة
     if (_groupKey != null) {
@@ -115,78 +181,242 @@ class _SectionScreenState extends State<SectionScreen> {
     setState(() => _visible = list);
   }
 
-  /// مفتاح تجميع الخدمة حسب نوع القسم
+  /// مفتاح تجميع الخدمة — من الفلتر الأساسي المُسنَد للقسم.
+  /// وإن لم يُسنَد فلتر (خادم قديم) نرجع إلى إعداد القسم المضمّن.
   String _keyOf(Service s) {
-    switch (_info.groupBy) {
-      case 'specialty':
-        return 'sp-${s.specialtyId ?? 0}';
-      case 'meta':
-        return 'mt-${s.metaVal(_info.metaKey ?? 'vehicle') ?? 'أخرى'}';
-      default:
-        return 'rg-${s.regionId ?? 0}';
+    final f = _primaryFilter;
+    if (f == null) {
+      switch (_info.groupBy) {
+        case 'specialty':
+          return s.specialtyId == null ? 'sp-none' : 'sp-${s.specialtyId}';
+        case 'meta':
+          final v = s.metaVal(_info.metaKey ?? 'vehicle');
+          return (v == null || v.isEmpty) ? 'mt-none' : 'mt-$v';
+        default:
+          return s.regionId == null ? 'rg-none' : 'rg-${s.regionId}';
+      }
     }
+    final v = _valueOf(s, f);
+    final p = f.sourceType == 'specialty'
+        ? 'sp'
+        : (f.sourceType == 'field' ? 'mt' : 'rg');
+    return '$p-${v.isEmpty ? 'none' : v}';
   }
 
+  /// تسمية بطاقة المجموعة — من الفلتر الأساسي المُسنَد للقسم
   String _labelOf(Service s) {
-    switch (_info.groupBy) {
+    final f = _primaryFilter;
+    if (f == null) {
+      switch (_info.groupBy) {
+        case 'specialty':
+          return _specialtyLabel(s);
+        case 'meta':
+          return s.metaVal(_info.metaKey ?? 'vehicle') ?? 'أخرى';
+        default:
+          return s.regionName ?? 'غير محدد';
+      }
+    }
+    switch (f.sourceType) {
       case 'specialty':
-        /* meta.specialty قد يكون اسماً («أمراض داخلية») في البيانات
-           القديمة أو مُعرّف خيار («5») في الجديدة. نفضّل الحقل
-           المحلول من الخادم، ولا نعرض رقماً خاماً أبداً. */
-        final raw = (s.meta['specialty_name'] ?? s.metaVal('specialty') ?? '')
-            .toString()
-            .trim();
-        final resolved = widget.category.fields
-            .where((f) => f.key == 'specialty')
-            .expand((f) => f.options)
-            .where((o) =>
-                o.value == raw ||
-                o.id.toString() == raw ||
-                o.label == raw)
-            .map((o) => o.label)
-            .firstOrNull;
-        if (resolved != null && resolved.isNotEmpty) return resolved;
-        // لا نعرض مُعرّفاً رقمياً خاماً أبداً («9» مثلاً) — الاختصاص غير معروف
-        // فنُعيد التسمية الافتراضية. كان النمط السابق `^\d+\$` يطابق رقماً
-        // متبوعاً بعلامة $ حرفية، فتمرّ الأرقام الخام إلى الواجهة رغم الحماية.
-        if (raw.isNotEmpty && !RegExp(r'^\d+$').hasMatch(raw)) return raw;
-        return 'عام';
-      case 'meta':
-        return s.metaVal(_info.metaKey ?? 'vehicle') ?? 'أخرى';
+        return _specialtyLabel(s);
+      case 'field':
+        final v = _valueOf(s, f);
+        // خدمة بلا قيمة للحقل تُجمَّع «غير محدد» ولا تُخفى
+        return v.isEmpty ? 'غير محدد' : v;
+      case 'region':
       default:
-        return s.regionName ?? 'غير محددة';
+        return s.regionName ?? 'غير محدد';
     }
   }
 
-  /// بناء بطاقات التجميع (المستوى ١)
+  /// بناء بطاقات التجميع (المستوى ١) — من الفلتر الأساسي المُسنَد للقسم.
+  /// الترتيب مطابق للخادم: الأكثر «تعمل الآن» ثم الأكثر عدداً ثم أبجدياً.
   List<_Group> _buildGroups() {
     final map = <String, _Group>{};
     for (final s in _all) {
-      // طبّق الفلاتر عدا المجموعة
-      if (_govId != null && s.governorateId != _govId) continue;
-      if (_zone != null && s.regionZone != _zone) continue;
-      if (_regionId != null && s.regionId != _regionId) continue;
-      if (_specialtyId != null && s.specialtyId != _specialtyId) continue;
-      if (_status == 'open' && !s.isOpen) continue;
-      if (_status == 'closed' && s.isOpen) continue;
-      if (_status == 'duty' && !s.onDuty) continue;
-      if (_search.trim().isNotEmpty) {
-        final q = _search.trim().toLowerCase();
-        if (!s.name.toLowerCase().contains(q) &&
-            !s.address.toLowerCase().contains(q)) {
-          continue;
-        }
-      }
-
+      if (!_passes(s)) continue;
       final key = _keyOf(s);
-      map.putIfAbsent(
-          key, () => _Group(key: key, label: _labelOf(s), count: 0));
-      map[key]!.count++;
+      final g = map.putIfAbsent(
+          key, () => _Group(key: key, label: _labelOf(s), count: 0, open: 0));
+      g.count++;
+      if (s.isOpen) g.open++;
     }
 
-    final groups = map.values.toList()
+    return map.values.toList()
+      ..sort((a, b) {
+        // «غير محدد» آخر القائمة دائماً — كما يفعل الخادم، فيتطابق
+        // ترتيب بطاقات التطبيق مع ترتيب الويب
+        final an = a.key.endsWith('-none');
+        final bn = b.key.endsWith('-none');
+        if (an != bn) return an ? 1 : -1;
+        if (a.open != b.open) return b.open.compareTo(a.open);
+        if (a.count != b.count) return b.count.compareTo(a.count);
+        return a.label.compareTo(b.label);
+      });
+  }
+
+  /// أيقونة بطاقة المجموعة — من أيقونة الفلتر الذي اختارها المدير،
+  /// وإلا فنوع المصدر (مناطق · اختصاص · مركبات).
+  Widget _groupIcon(_Group g, {bool selected = false}) {
+    final c = selected ? Colors.white : AppTheme.textSecondary;
+    final f = _primaryFilter;
+    if (f != null && f.icon.isNotEmpty) {
+      return Icon(AppIcons.get(f.icon), size: 15, color: c);
+    }
+    final kind = f?.sourceType ?? _info.groupBy;
+    switch (kind) {
+      case 'specialty':
+        return Icon(LucideIcons.stethoscope, size: 15, color: c);
+      case 'field':
+      case 'meta':
+        return _vehicleIcon(g.label, selected: selected);
+      default:
+        return Icon(LucideIcons.mapPin, size: 15, color: c);
+    }
+  }
+
+  /// نص فلتر ثانوي على الشريحة: «الاختصاص: أسنان» أو «الاختصاص: الكل»
+  String _secLabel(CategoryFilterLink f) {
+    final cur = _secState[f.key] ?? '';
+    if (cur.isEmpty) return '${f.label}: الكل';
+    for (final s in _all) {
+      if (_valueOf(s, f) == cur) {
+        return '${f.label}: ${_filterValueLabel(s, f)}';
+      }
+    }
+    return '${f.label}: $cur';
+  }
+
+  /// تسمية قيمة الخدمة في فلتر ثانوي (بلا تغيير حالة العرض)
+  String _filterValueLabel(Service s, CategoryFilterLink f) {
+    switch (f.sourceType) {
+      case 'specialty':
+        return _specialtyLabel(s);
+      case 'field':
+        final v = _valueOf(s, f);
+        return v.isEmpty ? 'غير محدد' : v;
+      default:
+        return s.regionName ?? 'غير محدد';
+    }
+  }
+
+  /// قيم فلتر ثانوي المتاحة فعلاً في هذا القسم — مع عدد كل قيمة
+  List<_SecOption> _secOptions(CategoryFilterLink f) {
+    final counts = <String, int>{};
+    final labels = <String, String>{};
+    for (final s in _all) {
+      if (!_passes(s)) continue;
+      final v = _valueOf(s, f);
+      final k = v.isEmpty ? '__none' : v;
+      counts[k] = (counts[k] ?? 0) + 1;
+      labels.putIfAbsent(k, () => v.isEmpty ? 'غير محدد' : _filterValueLabel(s, f));
+    }
+    return counts.entries
+        .map((e) => _SecOption(
+              key: e.key,
+              label: labels[e.key] ?? e.key,
+              count: e.value,
+            ))
+        .toList()
       ..sort((a, b) => b.count.compareTo(a.count));
-    return groups;
+  }
+
+  /// اختيار قيمة فلتر ثانوي (ورقة سفلية)
+  Future<void> _pickSecondary(CategoryFilterLink f) async {
+    final opts = _secOptions(f);
+    final cur = _secState[f.key] ?? '';
+    final picked = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: AppTheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
+              child: Row(
+                children: [
+                  Icon(AppIcons.get(f.icon), size: 16, color: AppTheme.primary),
+                  const SizedBox(width: 7),
+                  Text(
+                    f.label,
+                    style: const TextStyle(
+                      fontSize: 14.5,
+                      fontWeight: FontWeight.w800,
+                      color: AppTheme.textPrimary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Flexible(
+              child: ListView(
+                shrinkWrap: true,
+                padding: const EdgeInsets.only(bottom: 10),
+                children: [
+                  ListTile(
+                    dense: true,
+                    title: const Text('الكل',
+                        style: TextStyle(fontSize: 13.5)),
+                    trailing: cur.isEmpty
+                        ? const Icon(LucideIcons.check,
+                            size: 16, color: AppTheme.primary)
+                        : null,
+                    onTap: () => Navigator.pop(ctx, ''),
+                  ),
+                  ...opts.map((o) => ListTile(
+                        dense: true,
+                        title: Text(o.label,
+                            style: const TextStyle(fontSize: 13.5)),
+                        trailing: Text(
+                          '${o.count}',
+                          style: const TextStyle(
+                              fontSize: 12, color: AppTheme.textMuted),
+                        ),
+                        selected: cur == o.key,
+                        onTap: () => Navigator.pop(
+                            ctx, cur == o.key ? '' : o.key),
+                      )),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (picked == null || !mounted) return;
+    setState(() {
+      if (picked.isEmpty) {
+        _secState.remove(f.key);
+      } else {
+        _secState[f.key] = picked;
+      }
+      _groupKey = null;   // القيم تغيّرت — أعِد للبطاقات
+      _picked = null;
+    });
+    _applyFilters();
+  }
+
+  /// صف الفلاتر الثانوية — يظهر فقط إن أسنَد المدير أكثر من فلتر للقسم
+  Widget _buildSecondaryRow() {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(14, 0, 14, 8),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: _secondaryFilters
+              .map((f) => _FilterChip(
+                    label: _secLabel(f),
+                    selected: (_secState[f.key] ?? '').isNotEmpty,
+                    onTap: () => _pickSecondary(f),
+                  ))
+              .toList(),
+        ),
+      ),
+    );
   }
 
   void _selectGroup(String? key) {
@@ -236,6 +466,9 @@ class _SectionScreenState extends State<SectionScreen> {
 
           // ─── فلاتر الحالة ───
           _buildStatusRow(),
+
+          // ─── الفلاتر الثانوية المُسنَدة للقسم (إن وُجدت) ───
+          if (_secondaryFilters.isNotEmpty) _buildSecondaryRow(),
 
           // ─── شريط العدد وطريقة العرض ───
           _buildToolbar(groups, openNow),
@@ -510,6 +743,15 @@ class _SectionScreenState extends State<SectionScreen> {
   Widget _buildBody(List<_Group> groups, bool useMini) {
     // المستوى الأول: بطاقات التجميع فقط
     if (_groupKey == null) {
+      // قسم بلا خدمات أصلاً — رسالة مختلفة عن «الفلاتر حجبت النتائج»،
+      // وإلا بقي الزائر أمام «لا توجد نتائج مطابقة» وهو لم يفلتر شيئاً
+      if (_all.isEmpty) {
+        return EmptyState(
+          icon: LucideIcons.inbox,
+          title: 'لا توجد خدمات بعد',
+          subtitle: 'لم تُضَف خدمات إلى «${widget.category.name}» حتى الآن',
+        );
+      }
       if (groups.isEmpty) {
         return const EmptyState(
           icon: LucideIcons.search,
@@ -524,15 +766,16 @@ class _SectionScreenState extends State<SectionScreen> {
             padding: const EdgeInsets.only(bottom: 10),
             child: Row(
               children: [
-                const Icon(LucideIcons.mapPin,
-                    size: 15, color: AppTheme.textSecondary),
+                _groupIcon(_Group(key: '', label: '', count: 0)),
                 const SizedBox(width: 6),
                 Text(
-                  _info.groupBy == 'specialty'
-                      ? 'الاختصاصات'
-                      : _info.groupBy == 'meta'
-                          ? 'نوع المركبة'
-                          : 'المناطق',
+                  // عنوان المجموعة = اسم الفلتر الذي أسنَده المدير لهذا القسم
+                  _primaryFilter?.label ??
+                      (_info.groupBy == 'specialty'
+                          ? 'الاختصاصات'
+                          : _info.groupBy == 'meta'
+                              ? 'نوع المركبة'
+                              : 'المناطق'),
                   style: const TextStyle(
                     fontSize: 13.5,
                     fontWeight: FontWeight.w700,
@@ -546,18 +789,11 @@ class _SectionScreenState extends State<SectionScreen> {
             spacing: 8,
             runSpacing: 8,
             children: groups.map((g) {
-              final icon = _info.groupBy == 'specialty'
-                  ? const Icon(LucideIcons.stethoscope,
-                      size: 15, color: AppTheme.textSecondary)
-                  : _info.groupBy == 'meta'
-                      ? _vehicleIcon(g.label)
-                      : const Icon(LucideIcons.mapPin,
-                          size: 15, color: AppTheme.textSecondary);
               return GroupCard(
                 title: g.label,
                 count: g.count,
                 selected: false,
-                icon: icon,
+                icon: _groupIcon(g),
                 onTap: () => _selectGroup(g.key),
               );
             }).toList(),
@@ -570,7 +806,7 @@ class _SectionScreenState extends State<SectionScreen> {
     // المستوى الثاني: خدمات المجموعة المختارة فقط
     final group = groups.firstWhere(
       (g) => g.key == _groupKey,
-      orElse: () => _Group(key: _groupKey!, label: '', count: 0),
+      orElse: () => _Group(key: _groupKey!, label: '', count: 0, open: 0),
     );
 
     if (_visible.isEmpty) {
@@ -594,13 +830,11 @@ class _SectionScreenState extends State<SectionScreen> {
           ),
           child: Row(
             children: [
-              const Icon(LucideIcons.mapPin, size: 14, color: AppTheme.primary),
+              _groupIcon(group, selected: false),
               const SizedBox(width: 6),
               Expanded(
                 child: Text(
-                  _info.groupBy == 'region'
-                      ? 'خدمات ${group.label}'
-                      : group.label,
+                  _groupIsRegion ? 'خدمات ${group.label}' : group.label,
                   style: const TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w700,
@@ -1241,10 +1475,31 @@ class _LayoutButton extends StatelessWidget {
 }
 
 /// مجموعة تجميع
+/// قيمة متاحة في فلتر ثانوي (للورقة السفلية)
+class _SecOption {
+  final String key;
+  final String label;
+  final int count;
+
+  const _SecOption({
+    required this.key,
+    required this.label,
+    required this.count,
+  });
+}
+
 class _Group {
   final String key;
   final String label;
   int count;
 
-  _Group({required this.key, required this.label, required this.count});
+  /// كم خدمة فيها تعمل الآن — يُقدَّم الترتيب عليها كما يفعل الخادم
+  int open;
+
+  _Group({
+    required this.key,
+    required this.label,
+    required this.count,
+    this.open = 0,
+  });
 }

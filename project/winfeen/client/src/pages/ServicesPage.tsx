@@ -7,6 +7,7 @@ import {
   primaryFilter,
   secondaryFilters,
   groupsFor,
+  buildGroups,
   matchesGroup,
   matchesSecondary,
   secondaryOptions,
@@ -17,7 +18,7 @@ import MiniServiceCard from '../components/MiniServiceCard'
 import ServicePanel from '../components/ServicePanel'
 import Icon from '../components/Icon'
 import CatIcon from '../components/CatIcon'
-import { fmtDateTime } from '../lib/utils'
+import { findCategory, fmtDateTime } from '../lib/utils'
 
 /**
  * إعدادات العرض لكل قسم — العنوان والوحدة وطريقة البطاقات.
@@ -83,8 +84,13 @@ export default function ServicesPage() {
   const { slug } = useParams<{ slug: string }>()
   const { categories, settings, governorates } = useStore()
 
-  const cat = categories.find((c) => c.slug === slug)
-  const info: CatCfg = CAT_INFO[slug ?? ''] ?? {
+  /* الرابط قد يكون المسار لا الرمز: «المخابر» رمزها laboratory ومسارها
+     /laboratories. المطابقة بالرمز وحده تُرجع undefined فيصير القسم مجهولاً
+     فلا فلتر ولا خدمات ولا رسالة — وهي الشكوى نفسها. */
+  const cat = useMemo(() => findCategory(categories, slug ?? ''), [categories, slug])
+  const catSlug = cat?.slug ?? slug ?? ''
+
+  const info: CatCfg = CAT_INFO[catSlug] ?? {
     title: cat?.name ?? 'الخدمات',
     desc: cat?.description ?? '',
     unit: 'خدمة',
@@ -120,7 +126,7 @@ export default function ServicesPage() {
 
   const load = useCallback(async () => {
     const s = stateRef.current
-    const params: Record<string, any> = { category_id: slug, limit: 300, sort: 'open_first' }
+    const params: Record<string, any> = { category_id: catSlug, limit: 300, sort: 'open_first' }
     if (s.zone) params.zone = s.zone
     if (s.govId) params.governorate_id = s.govId
     if (s.status) params.status = s.status
@@ -156,7 +162,7 @@ export default function ServicesPage() {
     } finally {
       setLoading(false)
     }
-  }, [slug])
+  }, [catSlug])
 
   useEffect(() => { load() }, [load])
 
@@ -175,10 +181,18 @@ export default function ServicesPage() {
   useEffect(() => {
     setGroupKey(null); setSecondaryState({}); setPicked(null)
     setLayout(info.defaultLayout ?? 'card')
-  }, [slug, info.defaultLayout])
+  }, [catSlug, info.defaultLayout])
 
-  /** بطاقات المستوى الأول — من تجميع الخادم للفلتر الأساسي */
-  const cards = useMemo(() => groupsFor(primary, groups), [primary, groups])
+  /**
+   * بطاقات المستوى الأول — من تجميع الخادم للفلتر الأساسي.
+   * وإن لم يرسل الخادم تجميعاً (حزمة واجهة أحدث من الخادم، أو قسم بلا فلتر)
+   * نبنيه محلياً من الخدمات — فلا تظهر الصفحة فارغة.
+   */
+  const cards = useMemo(() => {
+    if (!primary) return []
+    const fromApi = groupsFor(primary, groups)
+    return fromApi.length ? fromApi : buildGroups(items, primary)
+  }, [primary, groups, items])
 
   const selectedCard = useMemo(
     () => (groupKey === null ? null : cards.find((g) => g.key === groupKey) ?? null),
@@ -210,7 +224,14 @@ export default function ServicesPage() {
   }
 
   // إسقاط الخدمة المختارة عند تغيير الفلاتر أو القسم
-  useEffect(() => { setPicked(null) }, [slug, zone, status, q, govId, groupKey, secondaryState])
+  useEffect(() => { setPicked(null) }, [catSlug, zone, status, q, govId, groupKey, secondaryState])
+
+  /** هل هناك فلتر يضيّق النتائج؟ (يفرّق بين «قسم فارغ» و«لا نتائج مطابقة») */
+  const hasNarrowingFilters = govId !== '' || zone !== '' || status !== '' || q.trim() !== ''
+
+  const clearNarrowing = () => {
+    setGovId(''); setZone(''); setStatus(''); setQ(''); setGroupKey(null); setSecondaryState({})
+  }
 
   const unitLabel = total === 1 ? info.unit
     : (total >= 3 && total <= 10 ? info.unitPlural : info.unit)
@@ -365,22 +386,49 @@ export default function ServicesPage() {
       )}
 
       {/* ═══ المستوى الثاني: خدمات المجموعة المختارة فقط ═══ */}
-      {loading ? (
+      {!cat && categories.length > 0 ? (
+        <div className="empty-state">
+          <span className="empty-state__icon">🧭</span>
+          <h3>القسم غير موجود</h3>
+          <p>لا يوجد قسم بهذا الرابط. تحقّق من الرابط أو ارجع إلى الرئيسية.</p>
+        </div>
+      ) : loading ? (
         <div className="skeletons">
           {[1, 2, 3].map((i) => <div key={i} className="skel-card" />)}
         </div>
-      ) : !primary ? (
-        /* قسم بلا فلتر مُسنَد — خدماته تُعرض كقائمة مباشرة */
-        <div className={layout === 'card' ? 'svc-grid svc-grid--compact' : 'svc-list'}>
-          {items.map((s) => <ServiceCard key={s.id} s={s} compact={layout === 'list'} />)}
-        </div>
-      ) : cards.length === 0 ? (
-        /* لا خدمات في القسم أصلاً — لا بطاقات تُختار، فلا معنى لتلميح الاختيار */
-        <div className="empty-state">
-          <span className="empty-state__icon">📭</span>
-          <h3>لا توجد خدمات بعد</h3>
-          <p>لم تُضَف خدمات إلى «{info.title}» حتى الآن.</p>
-        </div>
+      ) : items.length === 0 ? (
+        /* لا نتائج — والرسالة تفرّق بين «القسم فارغ» و«الفلاتر حجبت كل شيء»،
+           وإلا بقي الزائر أمام صفحة صامتة لا يعرف سببها */
+        hasNarrowingFilters ? (
+          <div className="empty-state">
+            <span className="empty-state__icon">🔍</span>
+            <h3>لا توجد نتائج مطابقة</h3>
+            <p>جرّب توسيع البحث: ألغِ المحافظة أو النطاق أو الحالة أو البحث النصي.</p>
+            <button className="btn btn--ghost btn--sm" onClick={clearNarrowing}>إلغاء كل الفلاتر</button>
+          </div>
+        ) : (
+          <div className="empty-state">
+            <span className="empty-state__icon">📭</span>
+            <h3>لا توجد خدمات بعد</h3>
+            <p>لم تُضَف خدمات إلى «{info.title}» حتى الآن.</p>
+          </div>
+        )
+      ) : !primary || cards.length === 0 ? (
+        /* قسم بلا فلتر مُسنَد — خدماته تُعرض كقائمة مباشرة.
+           ولا بدّ من `visibleItems` لا `items`: الفلاتر الثانوية تُطبَّق عليها،
+           وإلا عُرضت خدمات حجبها فلتر اختاره الزائر. */
+        visibleItems.length === 0 ? (
+          <div className="empty-state">
+            <span className="empty-state__icon">🔍</span>
+            <h3>لا توجد نتائج مطابقة</h3>
+            <p>جرّب توسيع البحث: ألغِ المحافظة أو النطاق أو الحالة أو البحث النصي.</p>
+            <button className="btn btn--ghost btn--sm" onClick={clearNarrowing}>إلغاء كل الفلاتر</button>
+          </div>
+        ) : (
+          <div className={layout === 'card' ? 'svc-grid svc-grid--compact' : 'svc-list'}>
+            {visibleItems.map((s) => <ServiceCard key={s.id} s={s} compact={layout === 'list'} />)}
+          </div>
+        )
       ) : !selectedCard ? (
         <div className="svc-hint">
           <span className="svc-hint__icon"><CatIcon icon={cat?.icon} size={40} /></span>

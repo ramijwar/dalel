@@ -503,7 +503,18 @@ function CategoryForm({ cat, onSaved }: { cat: Category | null; onSaved: () => v
         />
       </div>
       <div className="form-grid">
-        <label><span>المسار</span><input value={route} onChange={(e) => setRoute(e.target.value)} dir="ltr" placeholder="/slug" /></label>
+        <label>
+          <span>المسار</span>
+          <input value={route} onChange={(e) => setRoute(e.target.value)} dir="ltr" placeholder="/slug" />
+          {/* معاينة الرابط: الرابط في الرئيسية يُبنى من «المسار» لا من «الرمز».
+              كان اختلافهما يخفي فلتر القسم وخدماته بلا أي رسالة (المخابر). */}
+          <span className="field__help">
+            الرابط: <code dir="ltr">{route || (slug ? `/${slug}` : '/…')}</code>
+            {route && slug && route.replace(/^\/+|\/+$/g, '') !== slug && (
+              <> — يختلف عن الرمز «{slug}»، وكلا الرابطين يعمل.</>
+            )}
+          </span>
+        </label>
         <label><span>طريقة العرض</span><select value={layout} onChange={(e) => setLayout(e.target.value)}><option value="card">بطاقة</option><option value="list">قائمة</option><option value="row">صف</option></select></label>
       </div>
       <label><span>الوصف</span><textarea value={desc} onChange={(e) => setDesc(e.target.value)} rows={2} /></label>

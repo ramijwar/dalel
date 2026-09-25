@@ -77,6 +77,39 @@ export function groupsFor(
   return apiGroups[filter.key] ?? []
 }
 
+/**
+ * بناء بطاقات التجميع محلياً من الخدمات — شبكة أمان.
+ *
+ * تُستخدم إن لم يرسل الخادم `groups` (حزمة واجهة جديدة على خادم لم يُحدَّث
+ * بعد، أو قسم بلا فلتر لكن بخدمات). بلا هذه الشبكة تظهر الصفحة فارغة
+ * بلا أي بطاقة ولا رسالة — وهي الشكوى التي بدأنا منها.
+ */
+export function buildGroups(items: Service[], filter: CategoryFilterLink): GroupCard[] {
+  const buckets = new Map<string, GroupCard>()
+  for (const s of items) {
+    const value = serviceFilterValue(s, filter)
+    const key = value === '' ? '__none' : value
+    const cur = buckets.get(key) ?? {
+      key,
+      label: value === '' ? 'غير محدد' : (filter.source_type === 'region' ? (s.region_name || value) : value),
+      icon: filter.icon || (filter.source_type === 'region' ? 'map-pin' : 'circle-dot'),
+      total: 0,
+      open: 0,
+      on_duty: 0,
+    }
+    cur.total++
+    if (s.status === 'open') cur.open++
+    if (s.on_duty) cur.on_duty++
+    buckets.set(key, cur)
+  }
+  return [...buckets.values()].sort((a, b) =>
+    (a.key === '__none' ? 1 : 0) - (b.key === '__none' ? 1 : 0) ||
+    b.open - a.open ||
+    b.total - a.total ||
+    a.label.localeCompare(b.label, 'ar'),
+  )
+}
+
 /** مُحدِّد الفلتر الثانوي: {فلتر} ← القيمة المختارة */
 export type SecondaryState = Record<string, string>
 

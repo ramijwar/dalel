@@ -342,6 +342,42 @@ function filters_list(bool $includeInactive = false): array
     return $out;
 }
 
+/**
+ * يمنح قسماً **جديداً** فلتراً أساسياً افتراضياً.
+ *
+ * بلا فلتر أساسي لا تُبنى بطاقات المستوى الأول لصفحة القسم — فلا يجد
+ * الزائر ما يختاره، وإن لم يكن في القسم خدمات بعد ظهرت الصفحة فارغة
+ * بلا أي رسالة. هذا ما جرى لقسم «المخابر» المُنشأ حديثاً.
+ *
+ * تُطبَّق عند الإنشاء فقط، ولا تُطبَّق على الأقسام القائمة — حتى لا نُلغي
+ * قرار المدير إن كان قد ألغى فلاتر قسمٍ عن قصد ليُعرض كقائمة.
+ */
+function attach_default_filter(int $categoryId): void
+{
+    try {
+        $st = db()->prepare("SELECT COUNT(*) FROM category_filters WHERE category_id = ?");
+        $st->execute([$categoryId]);
+        if ((int) $st->fetchColumn() > 0) {
+            return;
+        }
+
+        // «المناطق» أولاً (الأنفع لكل قسم)، وإلا أول فلتر مُفعَّل في المكتبة
+        $fid = db()->query("SELECT id FROM filters WHERE filter_key = 'region' AND is_active = 1")->fetchColumn();
+        if (!$fid) {
+            $fid = db()->query("SELECT id FROM filters WHERE is_active = 1 ORDER BY sort_order, id LIMIT 1")->fetchColumn();
+        }
+        if (!$fid) {
+            return;   // لا فلاتر في المكتبة أصلاً
+        }
+
+        db()->prepare("INSERT OR IGNORE INTO category_filters (category_id, filter_id, is_primary, sort_order, is_active, created_at)
+                       VALUES (?,?,1,0,1,?)")
+            ->execute([$categoryId, (int) $fid, app_now()->format('Y-m-d H:i:s')]);
+    } catch (\Throwable $e) {
+        // فشل الإسناد لا يمنع إنشاء القسم — المدير يستطيع إسناده يدوياً
+    }
+}
+
 /** كم قسماً يستخدم كل فلتر — يُعرض في المكتبة ويمنع الحذف المفاجئ */
 function filter_usage_counts(): array
 {
@@ -1824,6 +1860,8 @@ function admin_category_save(?int $id): void
                              VALUES (:slug,:name,:singular,:icon,:color,:description,:route,:sort_order,:layout,:features,:is_active)");
         $st->execute($data);
         $newId = (int) db()->lastInsertId();
+        // فلتر أساسي افتراضي — وإلا عرضت صفحته خدمات بلا بطاقات تجميع
+        attach_default_filter($newId);
         log_activity('create', 'category', $newId, 'أضاف قسم: ' . $name, 'admin', (int) (current_user()['id'] ?? 0));
         ok(['id' => $newId, 'message' => 'تمت إضافة القسم، يمكنك الآن إضافة خدمات ضمنه']);
     }

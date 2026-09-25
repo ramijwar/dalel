@@ -12,7 +12,7 @@ class DatabaseService {
   static final DatabaseService instance = DatabaseService._();
 
   static const String _dbName = 'dalel.db';
-  static const int _version = 3;
+  static const int _version = 4;
 
   Database? _db;
 
@@ -75,6 +75,7 @@ class DatabaseService {
         sort_order INTEGER DEFAULT 0,
         layout TEXT DEFAULT 'card',
         features TEXT,
+        filters TEXT,
         is_active INTEGER DEFAULT 1
       )
     ''');
@@ -333,6 +334,13 @@ class DatabaseService {
       await _addColumnIfMissing(db, 'category_fields', 'suffix', "TEXT DEFAULT ''");
       await _addColumnIfMissing(
           db, 'category_fields', 'hide_when_false', 'INTEGER NOT NULL DEFAULT 0');
+    }
+
+    //   ٣ → ٤: الفلاتر المُسنَدة لكل قسم (ميزة الفلاتر في لوحة التحكم).
+    //   تُخزَّن كنص JSON — بدونها يعمل التطبيق بلا إنترنت بالتجميع
+    //   الاحتياطي المضمّن فقط، فلا تُطبَّق فلاتر المدير على الأقسام الجديدة.
+    if (oldV < 4) {
+      await _addColumnIfMissing(db, 'categories', 'filters', "TEXT DEFAULT ''");
     }
   }
 
@@ -604,9 +612,28 @@ class DatabaseService {
         layout: c.layout,
         features: c.features,
         fields: fieldsByCat[c.id] ?? const [],
+        filters: _decodeFilters(r['filters']),
         isActive: c.isActive,
       );
     }).toList();
+  }
+
+  /// فكّ فلاتر القسم المخزّنة نصاً — أي تلف في النص يعني «بلا فلاتر»
+  /// فيُستخدم التجميع الاحتياطي بدل الانهيار.
+  static List<CategoryFilterLink> _decodeFilters(dynamic raw) {
+    final txt = (raw ?? '').toString().trim();
+    if (txt.isEmpty) return const [];
+    try {
+      final list = jsonDecode(txt);
+      if (list is! List) return const [];
+      return list
+          .whereType<Map>()
+          .map((e) => CategoryFilterLink.fromJson(
+              e.map((k, v) => MapEntry(k.toString(), v))))
+          .toList();
+    } catch (_) {
+      return const [];
+    }
   }
 
   static int _asInt(dynamic v) => v is int ? v : int.tryParse('$v') ?? 0;
