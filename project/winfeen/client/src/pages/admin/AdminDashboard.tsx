@@ -832,6 +832,27 @@ function RequestsTab() {
     load()
   }
 
+  /**
+   * حذف الطلب.
+   * ⚠️ الطلب الموافَق عليه أنشأ خدمة فعلية، وحذف الطلب **لا يحذفها**.
+   * لذلك نُصرّح بذلك في التأكيد مع رقم الخدمة، وإلا ظنّ المدير أنه أزال
+   * الطلب فبقيت الخدمة منشورة بلا أن يدري.
+   */
+  const doDelete = async (r: ServiceRequest) => {
+    const linked = r.status === 'approved' && r.created_service_id
+    const msg = linked
+      ? `حذف الطلب «${r.name}»؟\n\n⚠️ الخدمة المنشأة منه (#${r.created_service_id}) لن تُحذف وستبقى ظاهرة للمستخدمين.\nاحذفها من تبويب «الخدمات» إن أردت.\n\nلا يمكن التراجع.`
+      : `حذف الطلب «${r.name}»؟\n\nلا يمكن التراجع.`
+    if (!confirm(msg)) return
+    try {
+      const res = await api.admin.deleteRequest(r.id)
+      toast(res.message || 'تم حذف الطلب')
+      load()
+    } catch (err: any) {
+      toast(err?.message || 'تعذّر حذف الطلب', 'error')
+    }
+  }
+
   return (
     <>
       <div className="admin-toolbar">
@@ -856,13 +877,25 @@ function RequestsTab() {
                   {r.status === 'pending' ? ' معلّق' : r.status === 'approved' ? ' موافق' : ' مرفوض'}
                 </span>
                 {r.admin_note && <p className="req-note"><Icon name="pencil" size={13} /> {r.admin_note}</p>}
+                {/* الخدمة المنشأة من الطلب — رابط مباشر ليتسنّى حذفها/تعديلها */}
+                {r.created_service_id ? (
+                  <Link to={`/s/${r.created_service_id}`} className="req-link">
+                    <Icon name="boxes" size={13} /> الخدمة المنشأة #{r.created_service_id}
+                  </Link>
+                ) : null}
               </div>
-              {r.status === 'pending' && (
-                <div className="req-actions">
-                  <button className="btn btn--sm btn--success" onClick={() => doApprove(r.id)}><Icon name="check" size={13} /> موافقة</button>
-                  <button className="btn btn--sm btn--danger" onClick={() => doReject(r.id)}><Icon name="circle-x" size={13} /> رفض</button>
-                </div>
-              )}
+              <div className="req-actions">
+                {r.status === 'pending' && (
+                  <>
+                    <button className="btn btn--sm btn--success" onClick={() => doApprove(r.id)}><Icon name="check" size={13} /> موافقة</button>
+                    <button className="btn btn--sm btn--danger" onClick={() => doReject(r.id)}><Icon name="circle-x" size={13} /> رفض</button>
+                  </>
+                )}
+                {/* الحذف متاح لكل الحالات — الطلبات المرفوضة والقديمة تحتاج تنظيفاً */}
+                <button className="iconbtn iconbtn--danger" onClick={() => doDelete(r)} title="حذف الطلب" aria-label={`حذف الطلب ${r.name}`}>
+                  <Icon name="trash-2" size={15} />
+                </button>
+              </div>
             </div>
           ))}
         </div>

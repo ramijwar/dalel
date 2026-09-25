@@ -3346,3 +3346,33 @@ dialog.modal.modal--wide {
   .ffilters__label { min-width: 0; padding-top: 0; }
   .ffilters__row { flex-direction: column; gap: 6px; }
 }
+
+/* ══════════════════════════════════════════════════════════════
+   تبويب الطلبات — رابط الخدمة المنشأة + أزرار الإجراءات
+   ══════════════════════════════════════════════════════════════ */
+
+/* رابط مباشر للخدمة التي أنشأها الطلب الموافَق عليه.
+   بدونه كان المدير يرى «موافق» ولا يعرف أي خدمة نتجت عنها. */
+.req-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 8px;
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--bg);
+  color: var(--accent);
+  font-size: 0.76rem;
+  font-weight: 600;
+  text-decoration: none;
+  transition: var(--transition);
+}
+.req-link:hover {
+  background: var(--accent-lighter);
+  border-color: var(--accent);
+}
+
+/* الإجراءات: زر الحذف محاذٍ لأزرار الموافقة/الرفض بنفس الارتفاع */
+.req-actions { align-items: center; flex-wrap: wrap; }
+.req-actions .iconbtn { flex: none; }

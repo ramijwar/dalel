@@ -1830,7 +1830,15 @@ function admin_request_reject(int $id): void
 
 function admin_request_delete(int $id): void
 {
-    db()->prepare("DELETE FROM service_requests WHERE id = ?")->execute([$id]);
+    $st = db()->prepare("DELETE FROM service_requests WHERE id = ?");
+    $st->execute([$id]);
+
+    // كان يردّ «تم حذف الطلب» حتى لطلب غير موجود — تأكيد كاذب للمدير
+    // (نقرة مزدوجة، أو قائمة قديمة بعد حذف طلبٍ من جهاز آخر).
+    if ($st->rowCount() === 0) {
+        fail('الطلب غير موجود — ربما حُذف مسبقاً', 404);
+    }
+
     ok(['message' => 'تم حذف الطلب']);
 }
 
