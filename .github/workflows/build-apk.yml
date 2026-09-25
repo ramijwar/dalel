@@ -150,14 +150,15 @@ jobs:
               echo "::endgroup::"
             }
             # ─── أهم ما يلزم للتشخيص أولاً ───
-            # سقف التعليقات (::error) عشر لكل خطوة — فتُصرف على ما يُحدّد
-            # *أي اختبار* سقط و*أي ودجة* تجاوزت التخطيط و*أين* سطرها.
-            {
-              grep -nE '^[0-9]{2}:[0-9]{2} \+[0-9]+ -[0-9]+: .*' /tmp/test.log | cut -c1-300
-              awk '/error-causing widget/{c=4} c&&c--{print NR": "$0}' /tmp/test.log | cut -c1-300
-              grep -nE 'overflowed by|but the constraints' /tmp/test.log | head -n 3 | cut -c1-300
-            } | head -n 10 | while IFS= read -r l; do
-              echo "::error title=تشخيص::$(echo "$l" | cut -c1-400)"
+            # سقف التعليقات (::error) عشر لكل خطوة. نُصرفها على **ملخّص كل
+            # اختبار ساقط**: اسمه + سطر المتوقّع/الواقعي + سطر الودجة المتسبّبة.
+            # التعليق الواحد يحمل عدة أسطر، فلا تُهدر الحصة على الترويسات.
+            grep -nE '\[E\]$' /tmp/test.log | head -n 5 | cut -d: -f1 | while IFS= read -r ln; do
+              name=$(sed -n "${ln}p" /tmp/test.log | cut -c1-220)
+              body=$(sed -n "$((ln+1)),$((ln+45))p" /tmp/test.log \
+                | grep -aE 'Expected:|Actual:|Which:|reason|error-causing widget|was thrown|overflowed by|but the constraints|^ *[A-Za-z].*\.dart:[0-9]+' \
+                | head -n 5 | sed 's/^[ \t]*//' | paste -sd ' ⟶ ' - | cut -c1-800)
+              echo "::error title=اختبار ساقط :: $name ⟶ $body"
             done
 
             # ما زاد عن السقف يُطبع في السجل وحده (بلا ::error كي لا يُهدر السقف)

@@ -43,6 +43,14 @@ AppUpdate _update({
       publishedAt: DateTime(2026, 9, 25),
     );
 
+/// سطح هاتف حقيقي (٣٦٠×٨٠٠ نقطة منطقية) — نفس ما يراه المستخدم،
+/// فقياسات الشريط والمعروض من النص تُقاس على العرض الفعلي لا على سطح الاختبار.
+void _phone(WidgetTester tester) {
+  tester.view.physicalSize = const Size(1080, 2400);
+  tester.view.devicePixelRatio = 3.0;
+  addTearDown(tester.view.reset);
+}
+
 /// هيئة الاختبار: نفس سياق التطبيق (RTL + ثيم دليل الدير) داخل تمرير عمودي.
 Widget _host(UpdateService s) => MaterialApp(
       theme: AppTheme.light(),
@@ -65,6 +73,7 @@ void main() {
     testWidgets('متاح: قصير، وزر «تنزيل» ظاهر فيه', (tester) async {
       final s = UpdateService.forTest()
         ..debugSet(update: _update(), phase: UpdatePhase.available);
+      _phone(tester);
       await tester.pumpWidget(_host(s));
       await tester.pump();
 
@@ -82,6 +91,7 @@ void main() {
     testWidgets('يُعرض في صفٍّ واحد بعرض الشاشة كاملاً', (tester) async {
       final s = UpdateService.forTest()
         ..debugSet(update: _update(), phase: UpdatePhase.available);
+      _phone(tester);
       await tester.pumpWidget(_host(s));
       await tester.pump();
 
@@ -96,6 +106,7 @@ void main() {
 
     testWidgets('لا تحديث → لا شريط إطلاقاً', (tester) async {
       final s = UpdateService.forTest()..debugSet(clearUpdate: true);
+      _phone(tester);
       await tester.pumpWidget(_host(s));
       await tester.pump();
       expect(find.byType(FilledButton), findsNothing);
@@ -114,6 +125,7 @@ void main() {
           total: 12 * _mb,
           speed: 1.5 * _mb,
         );
+      _phone(tester);
       await tester.pumpWidget(_host(s));
       await tester.pump();
 
@@ -134,6 +146,7 @@ void main() {
           received: 12 * _mb,
           total: 12 * _mb,
         );
+      _phone(tester);
       await tester.pumpWidget(_host(s));
       await tester.pump();
 
@@ -149,6 +162,7 @@ void main() {
           phase: UpdatePhase.failed,
           error: 'تعذّر التنزيل (رمز 404)',
         );
+      _phone(tester);
       await tester.pumpWidget(_host(s));
       await tester.pump();
 
@@ -162,6 +176,7 @@ void main() {
     testWidgets('الضغط على «تنزيل» موصول بالخدمة فعلاً', (tester) async {
       final s = UpdateService.forTest()
         ..debugSet(update: _update(), phase: UpdatePhase.available);
+      _phone(tester);
       await tester.pumpWidget(_host(s));
       await tester.pump();
 
@@ -180,6 +195,7 @@ void main() {
     testWidgets('«لاحقاً» تُخفي الشريط في التحديث الاختياري', (tester) async {
       final s = UpdateService.forTest()
         ..debugSet(update: _update(), phase: UpdatePhase.available);
+      _phone(tester);
       await tester.pumpWidget(_host(s));
       await tester.pump();
 
@@ -192,6 +208,7 @@ void main() {
     testWidgets('التحديث الإلزامي: شارة «إلزامي» ولا زر إخفاء', (tester) async {
       final s = UpdateService.forTest()
         ..debugSet(update: _update(force: true), phase: UpdatePhase.available);
+      _phone(tester);
       await tester.pumpWidget(_host(s));
       await tester.pump();
 
@@ -210,6 +227,7 @@ void main() {
           update: _update(notes: List.generate(8, (i) => 'إصلاح رقم ${i + 1}').join('\n')),
           phase: UpdatePhase.available,
         );
+      _phone(tester);
       await tester.pumpWidget(_host(s));
       await tester.pump();
 
@@ -228,6 +246,7 @@ void main() {
           phase: UpdatePhase.downloaded,
           progress: 1,
         );
+      _phone(tester);
       await tester.pumpWidget(_host(s));
       await tester.pump();
 
