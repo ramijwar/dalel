@@ -492,7 +492,9 @@ void main() {
       await tester.ensureVisible(find.text('اتجاه السفر: ديرالزور-دمشق'));
       await tester.tap(find.text('اتجاه السفر: ديرالزور-دمشق'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('الكل'));
+      /* داخل الورقة السفلية تحديداً: شريط فلاتر الحالة أسفل الشاشة يحمل
+         أيضاً شريحة نصّها «الكل»، فـfind.text وحده يطابق عنصرين ويرمي. */
+      await tester.tap(find.widgetWithText(ListTile, 'الكل'));
       await tester.pumpAndSettle();
 
       expect(find.text('اتجاه السفر: الكل'), findsOneWidget);
