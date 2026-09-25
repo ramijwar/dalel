@@ -24,7 +24,7 @@
 |---|---|---|
 | `version_name` | اسم الإصدار الظاهر للمستخدم — مثل `1.3.0` | من `pubspec.yaml` |
 | `version_code` | رقم البناء الداخلي (يجب أن يزيد كل مرة) | من `pubspec.yaml` |
-| `server_url` | الخادم الذي يخاطبه التطبيق | الحيّ `https://t3lam.site/daleltest` |
+| `server_url` | الخادم الذي يخاطبه التطبيق | **الإنتاج** `https://t3lam.site/dalel` |
 | `build_type` | `release` للتوزيع · `debug` للتشخيص | `release` |
 | `arch` | معمارية المعالج: `arm64` (64 بت) · `universal` (كل الأجهزة) · `arm32` · `x64` | **`arm64`** |
 | `publish_release` | إنشاء «إصدار GitHub» برابط تحميل عام دائم | مغلق |

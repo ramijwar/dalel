@@ -4,9 +4,11 @@ class AppConfig {
 
   /// رأس الخادم المباشر (بدون شرطة لاحقة)
   ///
-  /// يمكن تغييره وقت البناء بلا تعديل الكود:
+  /// الافتراضي هو **خادم الإنتاج** `https://t3lam.site/dalel`.
+  ///
+  /// ويمكن تغييره وقت البناء بلا تعديل الكود:
   ///   flutter build apk --dart-define=DALEL_BASE_URL=https://t3lam.site/daleltest
-  /// فتبني نسخة تخاطب مسار الاختبار، وأخرى تخاطب المسار الأساسي.
+  /// فتبني نسخة تخاطب مسار الاختبار، وأخرى تخاطب الإنتاج.
   static const String baseUrl = String.fromEnvironment(
     'DALEL_BASE_URL',
     defaultValue: 'https://t3lam.site/dalel',
