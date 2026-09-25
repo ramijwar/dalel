@@ -133,11 +133,24 @@ jobs:
               ' /tmp/test.log
               echo "::endgroup::"
             }
-            # لكل اختبار فاشل: اسمه وسطر الخطأ الأساسي — ظاهر في واجهة Actions بلا فتح السجل
+            # لكل اختبار فاشل: سطر واحد مضغوط يحمل السبب كاملاً (يظهر في واجهة Actions)
             awk '
-              /\[E\]$/ {name=$0; sub(/^[0-9:]+ \+[0-9]+ -[0-9]+: /,"",name); getline nl; while (nl !~ /Expected|Actual|Which|EXCEPTION|error/ && getline nl > 0 && nl !~ /^[0-9][0-9]:[0-9][0-9] /) {}; print name " ⟵ " nl}
-            ' /tmp/test.log | head -n 10 | while IFS= read -r l; do
-              echo "::error title=اختبار فاشل::$(echo "$l" | cut -c1-240)"
+              BEGIN { buf=""; infail=0 }
+              /\[E\]$/ {
+                if (infail && buf != "") print buf;
+                infail=1; buf=$0;
+                sub(/^[0-9:]+ \+[0-9]+ -[0-9]+: /, "", buf);
+                sub(/ \[E\]$/, "", buf);
+                next
+              }
+              infail && /^[0-9][0-9]:[0-9][0-9] / { if (buf != "") print buf; buf=""; infail=0 }
+              infail {
+                l=$0; gsub(/^[ \t]+|[ \t]+$/, "", l);
+                if (l != "" && buf !~ l) buf = buf " » " l
+              }
+              END { if (infail && buf != "") print buf }
+            ' /tmp/test.log | head -n 12 | while IFS= read -r l; do
+              echo "::error title=اختبار فاشل::$(echo "$l" | cut -c1-900)"
             done
             exit "$rc"
           fi

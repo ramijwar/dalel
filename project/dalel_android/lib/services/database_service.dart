@@ -270,7 +270,10 @@ class DatabaseService {
   ///   ١ → ٢: الحقول الخاصة بالأقسام + الحقول المحلولة للخدمات
   /// ══════════════════════════════════════════════════════════
   Future<void> _upgrade(Database db, int oldV, int newV) async {
-    if (oldV < 2) {
+    // ملاحظة: كل مرحلة مقيّدة بالإصدار الهدف أيضاً — بغير ذلك تُنفَّذ مرحلة
+    // أحدث من المطلوب عند الترقية إلى إصدار وسيط (كان ينهار في الاختبارات
+    // وعند أي ترقية جزئية بجدول غير موجود).
+    if (oldV < 2 && newV >= 2) {
       await db.execute('''
         CREATE TABLE IF NOT EXISTS category_fields (
           id INTEGER PRIMARY KEY,
@@ -330,7 +333,7 @@ class DatabaseService {
     //   ٢ → ٣: وحدة الحقل الرقمي + إخفاء القيمة المنطقية عند «لا»
     //   CREATE TABLE أعلاه لا يُضيف أعمدة إلى جدول موجود، فمن ثبّت الإصدار
     //   السابق يحتاج هذا الـ ALTER وإلا بقي بلا العمودين وانهارت قراءتهما.
-    if (oldV < 3) {
+    if (oldV < 3 && newV >= 3) {
       await _addColumnIfMissing(db, 'category_fields', 'suffix', "TEXT DEFAULT ''");
       await _addColumnIfMissing(
           db, 'category_fields', 'hide_when_false', 'INTEGER NOT NULL DEFAULT 0');
@@ -339,7 +342,7 @@ class DatabaseService {
     //   ٣ → ٤: الفلاتر المُسنَدة لكل قسم (ميزة الفلاتر في لوحة التحكم).
     //   تُخزَّن كنص JSON — بدونها يعمل التطبيق بلا إنترنت بالتجميع
     //   الاحتياطي المضمّن فقط، فلا تُطبَّق فلاتر المدير على الأقسام الجديدة.
-    if (oldV < 4) {
+    if (oldV < 4 && newV >= 4) {
       await _addColumnIfMissing(db, 'categories', 'filters', "TEXT DEFAULT ''");
     }
   }
