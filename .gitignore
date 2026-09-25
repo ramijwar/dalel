@@ -59,3 +59,8 @@ __pycache__/
 # لا يُرفع في Git ولا في أي أرشيف — token.php يولّد مفتاحاً جديداً لكل خادم.
 project/winfeen/api/storage/secret.key
 project/winfeen/api/storage/*.key
+
+# ── مفتاح توقيع الإصدار (release keystore) ──
+# أي ملف هنا يمنح من يحصل عليه القدرة على إصدار تحديثات موقّعة باسم التطبيق.
+# المجلد كله مستبعَد — ولو ضاع منه ملف واحد لأنشئت ثغرة صامتة.
+signing/

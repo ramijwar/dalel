@@ -42,6 +42,18 @@ on:
         options:
           - release
           - debug
+      arch:
+        description: 'معمارية المعالج — arm64 هي نسخة 64 بت (الأكثر شيوعاً)'
+        required: true
+        # نسخة 64 بت افتراضياً كما طُلب — وهي المطلوبة لمتجر Google Play.
+        # universal ملف واحد يعمل على كل الأجهزة (ويشمل 64 بت).
+        default: arm64
+        type: choice
+        options:
+          - arm64
+          - universal
+          - arm32
+          - x64
       publish_release:
         description: 'إنشاء «إصدار GitHub» مع الملف (يعطي رابط تحميل عام دائم)'
         required: false
@@ -59,7 +71,7 @@ on:
   # بناء تلقائي عند تغيير كود التطبيق على الفرع الرئيسي
   # (يبقى الملف جاهزاً دائماً بلا انتظار طلب، والباقي عند الطلب من الزر)
   push:
-    branches: [main]
+    branches: [main, 'arena/**']   # ⏳ مؤقت للتحقق — يُزال في الالتزام التالي
     paths:
       - 'project/dalel_android/**'
       - '.github/workflows/build-apk.yml'
@@ -224,6 +236,7 @@ jobs:
           IN_CODE: ${{ inputs.version_code }}
           IN_TYPE: ${{ inputs.build_type }}
           IN_URL: ${{ inputs.server_url }}
+          IN_ARCH: ${{ inputs.arch }}
         run: |
           set -e
           DEF=$(grep -m1 '^version:' pubspec.yaml | sed 's/^version:[[:space:]]*//')
@@ -249,12 +262,25 @@ jobs:
             *) echo "::error::عنوان الخادم يجب أن يبدأ بـ https:// (وصل: '$URL')"; exit 1 ;;
           esac
 
+          # ── المعمارية: ما يُمرَّر لـFlutter وما يُتوقَّع من اسم المخرَج ──
+          ARCH="${IN_ARCH:-arm64}"
+          case "$ARCH" in
+            arm64)     ABIFLAG="--target-platform android-arm64"; ABI_FILE="arm64-v8a"   ;;
+            arm32)     ABIFLAG="--target-platform android-arm";   ABI_FILE="armeabi-v7a" ;;
+            x64)       ABIFLAG="--target-platform android-x64";   ABI_FILE="x86_64"      ;;
+            universal) ABIFLAG="";                                ABI_FILE=""            ;;
+            *) echo "::error::معمارية غير معروفة: '$ARCH'"; exit 1 ;;
+          esac
+
           {
             echo "name=$NAME"
             echo "code=$CODE"
             echo "type=$TYPE"
             echo "url=$URL"
-            echo "apk=dalel-$NAME-$CODE.apk"
+            echo "arch=$ARCH"
+            echo "abiflag=$ABIFLAG"
+            echo "abifile=$ABI_FILE"
+            echo "apk=dalel-$NAME-$CODE-$ARCH.apk"
           } >> "$GITHUB_OUTPUT"
 
           echo "الإصدار: $NAME ($CODE) · النوع: $TYPE · الخادم: $URL"
@@ -267,6 +293,7 @@ jobs:
           echo "$KEYSTORE_BASE64" | base64 -d > dalel-release.jks
           cat > key.properties <<EOF
           storeFile=../dalel-release.jks
+          storeType=PKCS12
           storePassword=$KEYSTORE_PASSWORD
           keyAlias=${KEY_ALIAS:-dalel}
           keyPassword=${KEY_PASSWORD:-$KEYSTORE_PASSWORD}
@@ -295,6 +322,7 @@ jobs:
         run: |
           set +e
           flutter build apk --${{ steps.ver.outputs.type }} \
+            ${{ steps.ver.outputs.abiflag }} \
             --build-name="${{ steps.ver.outputs.name }}" \
             --build-number="${{ steps.ver.outputs.code }}" \
             --dart-define=DALEL_BASE_URL="${{ steps.ver.outputs.url }}" 2>&1 | tee /tmp/build.log
@@ -320,8 +348,26 @@ jobs:
         working-directory: ${{ env.APP_DIR }}
         run: |
           set -e
-          SRC="build/app/outputs/flutter-apk/app-${{ steps.ver.outputs.type }}.apk"
-          [ -f "$SRC" ] || { echo "::error::لم يُنتج ملف APK في $SRC"; exit 1; }
+          # اسم المخرَج يختلف بحسب المعمارية: نسخة 64 بت تُسمّى
+          # app-arm64-v8a-release.apk، والموحّدة app-release.apk
+          ABI="${{ steps.ver.outputs.abifile }}"
+          TYPE="${{ steps.ver.outputs.type }}"
+          DIR="build/app/outputs/flutter-apk"
+          if [ -n "$ABI" ]; then
+            SRC="$DIR/app-$ABI-$TYPE.apk"
+          else
+            SRC="$DIR/app-$TYPE.apk"
+          fi
+          # احتياط: التقط أي ملف مطابق لو اختلف الاسم في إصدار Flutter آخر
+          if [ ! -f "$SRC" ]; then
+            SRC=$(ls -1 "$DIR"/app-*.apk 2>/dev/null | head -1 || true)
+          fi
+          [ -f "$SRC" ] || {
+            echo "::error::لم يُنتج ملف APK — محتوى $DIR:"
+            ls -la "$DIR" 2>&1 || true
+            exit 1
+          }
+          echo "ملف المخرَج: $SRC"
 
           OUT="${{ steps.ver.outputs.apk }}"
           cp "$SRC" "$OUT"
@@ -338,12 +384,48 @@ jobs:
             echo "الملف: $OUT"
             echo "الإصدار: ${{ steps.ver.outputs.name }} (بناء ${{ steps.ver.outputs.code }})"
             echo "النوع: ${{ steps.ver.outputs.type }}"
+            echo "المعمارية: ${{ steps.ver.outputs.arch }}"
             echo "الخادم: ${{ steps.ver.outputs.url }}"
             echo "الحجم: $SIZE بايت"
             echo "SHA-256: $SHA"
             echo "الالتزام: ${{ github.sha }}"
           } > build-info.txt
           cat build-info.txt
+
+      # ─── التحقق من التوقيع: بصمة المفتاح الذي وقّع الملف فعلاً ───
+      # مهمّ لمتجر Google Play: يجب أن يكون الملف موقّعاً بمفتاحك لا بمفاتيح
+      # التصحيح. تُطبع البصمة هنا فيصبح الأمر قابلاً للتأكد لا للافتراض.
+      - name: التحقق من التوقيع
+        id: sign
+        if: always()
+        working-directory: ${{ env.APP_DIR }}
+        run: |
+          set +e
+          APK="${{ steps.ver.outputs.apk }}"
+          [ -f "$APK" ] || { echo "تخطّي: لا ملف بعد"; exit 0; }
+
+          APKSIGNER=$(ls -1 "$ANDROID_HOME"/build-tools/*/apksigner 2>/dev/null | sort -V | tail -1)
+          if [ -z "$APKSIGNER" ] || [ ! -x "$APKSIGNER" ]; then
+            echo "::warning title=لا apksigner::تعذّر إيجاد apksigner للتحقق من التوقيع"
+            exit 0
+          fi
+
+          OUT=$("$APKSIGNER" verify --print-certs "$APK" 2>&1)
+          echo "$OUT"
+          FP=$(echo "$OUT" | grep -i 'SHA-256 digest' | head -1 | sed 's/.*: //')
+          CN=$(echo "$OUT" | grep -i 'certificate DN' | head -1 | sed 's/.*: //')
+
+          if echo "$CN" | grep -qi 'Android Debug'; then
+            echo "::warning title=توقيع التصحيح::الملف موقّع بمفاتيح التصحيح — يصلح للتجربة لا للنشر على Google Play. أضف KEYSTORE_BASE64 وسواها من الأسرار."
+            echo "sig=debug" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice title=توقيع الإصدار::موقّع بمفتاح الإصدار: $CN"
+            echo "sig=release" >> "$GITHUB_OUTPUT"
+          fi
+          {
+            echo "sig_cn=$CN"
+            echo "sig_fp=$FP"
+          } >> "$GITHUB_OUTPUT"
 
       - name: ملخّص التشغيل
         working-directory: ${{ env.APP_DIR }}
@@ -357,6 +439,8 @@ jobs:
             echo "| الحجم | ${{ steps.pack.outputs.size_h }} ميغا |"
             echo "| الخادم | \`${{ steps.ver.outputs.url }}\` |"
             echo "| النوع | ${{ steps.ver.outputs.type }} |"
+            echo "| المعمارية | ${{ steps.ver.outputs.arch }} |"
+            echo "| التوقيع | ${{ steps.sign.outputs.sig == 'release' && 'مفتاح إصدار ✅' || 'مفاتيح تصحيح ⚠️' }} |"
             echo "| SHA-256 | \`${{ steps.pack.outputs.sha }}\` |"
             echo ""
             echo "### نشره للتحديث من داخل التطبيق"

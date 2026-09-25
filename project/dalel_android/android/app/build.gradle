@@ -51,6 +51,10 @@ android {
                 keyPassword = keystoreProps['keyPassword']
                 storeFile = file(keystoreProps['storeFile'])
                 storePassword = keystoreProps['storePassword']
+                // النوع الافتراضي يختلف بين إصدارات Java/Gradle، والتصريح به
+                // يمنع فشل «Invalid keystore format» مع ملف بصيغة أخرى.
+                // PKCS12 هي الصيغة التي يولّدها Android Studio الحديث وkeytool.
+                storeType = keystoreProps['storeType'] ?: 'PKCS12'
             }
         }
     }
