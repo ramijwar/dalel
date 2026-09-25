@@ -3,6 +3,7 @@ import 'package:lucide_icons/lucide_icons.dart';
 
 import '../models/models.dart';
 import '../config/theme.dart';
+import '../config/icons.dart';
 
 /* ══════════════════════════════════════════════════════════════
  *  الحقول الديناميكية — تُرسم حسب تعريفات القسم
@@ -11,8 +12,8 @@ import '../config/theme.dart';
  *    • نص / نص طويل / رقم / نعم-لا → حقول إدخال عادية
  * ══════════════════════════════════════════════════════════════ */
 
-/// يحوّل اسم أيقونة Lucide إلى أيقونة Flutter
-/// (يستخدم أسماء الحزم القديمة المتوافقة مع lucide_icons 0.257)
+/// أيقونة حقل أو خيار — تُفوَّض إلى [AppIcon] المركزي
+/// (خريطة واحدة للتطبيق كله: أسماء لوحة التحكم + الإيموجي + بديل آمن)
 class _FieldIcon extends StatelessWidget {
   final String name;
   final double size;
@@ -20,55 +21,9 @@ class _FieldIcon extends StatelessWidget {
 
   const _FieldIcon(this.name, {this.size = 16, this.color});
 
-  static const Map<String, IconData> _map = {
-    'check': LucideIcons.check,
-    'x': LucideIcons.x,
-    'hash': LucideIcons.hash,
-    'type': LucideIcons.type,
-    'stethoscope': LucideIcons.stethoscope,
-    'pill': LucideIcons.pill,
-    'fuel': LucideIcons.fuel,
-    'bus': LucideIcons.bus,
-    'car': LucideIcons.car,
-    'truck': LucideIcons.truck,
-    'heart': LucideIcons.heart,
-    'brain': LucideIcons.brain,
-    'bone': LucideIcons.bone,
-    'eye': LucideIcons.eye,
-    'ear': LucideIcons.ear,
-    'baby': LucideIcons.baby,
-    'dumbbell': LucideIcons.dumbbell,
-    'activity': LucideIcons.activity,
-    'circle-dot': LucideIcons.circleDot,
-    'list': LucideIcons.list,
-    'tag': LucideIcons.tag,
-    'info': LucideIcons.info,
-    'star': LucideIcons.star,
-    'clock': LucideIcons.clock,
-    'map-pin': LucideIcons.mapPin,
-    'store': LucideIcons.store,
-    'shopping-bag': LucideIcons.shoppingBag,
-    'utensils': LucideIcons.utensils,
-    'coffee': LucideIcons.coffee,
-    'home': LucideIcons.home,
-    'building': LucideIcons.building,
-    'users': LucideIcons.users,
-    'user': LucideIcons.user,
-    'phone': LucideIcons.phone,
-    'calendar': LucideIcons.calendar,
-    'zap': LucideIcons.zap,
-    'droplet': LucideIcons.droplet,
-    'sparkles': LucideIcons.sparkles,
-    'crown': LucideIcons.crown,
-    'gift': LucideIcons.gift,
-    'megaphone': LucideIcons.megaphone,
-  };
-
   @override
-  Widget build(BuildContext context) {
-    final icon = _map[name] ?? LucideIcons.circleDot;
-    return Icon(icon, size: size, color: color);
-  }
+  Widget build(BuildContext context) =>
+      AppIcon(name, size: size, color: color);
 }
 
 /* ══════════════════════════════════════════════════════════════

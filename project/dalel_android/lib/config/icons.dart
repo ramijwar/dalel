@@ -3,6 +3,12 @@ import 'package:lucide_icons/lucide_icons.dart';
 
 /// ══════════════════════════════════════════════════════════════
 /// خريطة أيقونات Lucide — تطابق أسماء أيقونات موقع الويب
+///
+/// كل أيقونة يستطيع المدير اختيارها من لوحة التحكم (ويب) يجب أن
+/// يكون لها مقابل هنا، وإلا ظهر القسم/الخدمة **بلا أيقونة** في التطبيق.
+/// مصدر أسماء لوحة التحكم: winfeen/client/src/components/Lucide.tsx
+/// وللفحص الآلي للتطابق:
+///   python3 project/tools/check_icons.py
 /// ══════════════════════════════════════════════════════════════
 class AppIcons {
   AppIcons._();
@@ -175,18 +181,77 @@ class AppIcons {
     'wallet': LucideIcons.wallet,
     'banknote': LucideIcons.banknote,
     'coins': LucideIcons.coins,
+
+    // ═══ أيقونات لوحة التحكم — كانت ناقصة فتظهر دائرة فارغة ═══
+    // (كلّها مُتحقَّق من وجودها في lucide_icons 0.257 المُثبَّتة)
+    'syringe': LucideIcons.syringe,              // 🩸 المخابر
+    'brain': LucideIcons.brain,                  // 🧠 عصبية
+    'bone': LucideIcons.bone,                     // 🦴 عظمية
+    'heart-pulse': LucideIcons.heartPulse,        // 🫀 أمراض قلبية
+    'thermometer': LucideIcons.thermometer,       // 🌡️ حرارة
+    'droplets': LucideIcons.droplets,             // 💧 سوائل
+    'bike': LucideIcons.bike,                     // 🚲 دراجة
+    'battery-charging': LucideIcons.batteryCharging, // 🔋 شحن
+    'arrow-right-left': LucideIcons.arrowRightLeft,
+    'arrow-down-wide-narrow': LucideIcons.arrowDownWideNarrow,
+    'unlock': LucideIcons.unlock,
+    'bar-chart-3': LucideIcons.barChart3,
+    'chart-pie': LucideIcons.pieChart,
+    'bell-plus': LucideIcons.bellPlus,
+    'chevrons-up-down': LucideIcons.chevronsUpDown,
+    'list-filter': LucideIcons.listFilter,
+    'shield-alert': LucideIcons.shieldAlert,
+    'user-x': LucideIcons.userX,
+    'locate-fixed': LucideIcons.locateFixed,
+    'train': LucideIcons.train,
+    'table': LucideIcons.table,
+    'type': LucideIcons.type,
+    'cross': LucideIcons.cross,                   // ✚ صليب طبي
+
+    // ═══ أيقونات حقول الحقول الديناميكية (كانت في خريطة منفصلة) ═══
+    'hash': LucideIcons.hash,
+    'ear': LucideIcons.ear,
+    'droplet': LucideIcons.droplet,
+    'circle-dot': LucideIcons.circleDot,
   };
 
-  /// حوّل اسم الأيقونة إلى IconData (مع بديل آمن)
+  /// أسماء تستطيع لوحة التحكم اختيارها ولا تملك مقابلًا مباشرًا في
+  /// حزمة lucide_icons 0.257 (الحزمة أقدم من لوحة التحكم)، فتُربط
+  /// بأقرب أيقونة متاحة كي لا يظهر العنصر بلا أيقونة أبدًا.
+  static final Map<String, String> _aliases = {
+    'hospital': 'cross',                   // 🏥 مشافٍ → صليب طبي
+    'bandage': 'cross',                    // 🩹 لاصق طبي
+    'train-front': 'train',                // 🚆 قطار أمامي → قطار
+    'sliders-horizontal': 'sliders',        // منزلقات ضبط
+    'circle-x': 'x-circle',                // إلغاء
+    'circle-check-big': 'check-circle-2',  // تمّ
+    'a-large-small': 'type',               // حجم الخط
+    'sort-desc': 'arrow-down-wide-narrow', // ترتيب تنازلي
+    'table-2': 'table',                    // جدول
+  };
+
+  /// الأيقونة البديلة عند غياب الاسم — نفس بديل الموقع (map-pin)
+  static const IconData _fallback = LucideIcons.mapPin;
+
+  /// حوّل اسم الأيقونة إلى IconData
+  ///
+  /// - يُطبّع الاسم (حروف صغيرة · شرطة بدل الشرطة السفلية)
+  /// - يمرّ على جدول الأسماء البديلة `_aliases`
+  /// - وإن لم يُعرف الاسم يرجع لبديل الموقع `map-pin` بدل دائرة فارغة
   static IconData get(String? name) {
-    if (name == null || name.isEmpty) return LucideIcons.circle;
-    final key = name.toLowerCase().trim();
-    return _map[key] ?? _map[key.replaceAll('_', '-')] ?? LucideIcons.circle;
+    if (name == null || name.isEmpty) return _fallback;
+    var key = name.toLowerCase().trim().replaceAll('_', '-');
+    if (key.startsWith('lucide-')) key = key.substring(7);
+    key = _aliases[key] ?? key;
+    return _map[key] ?? _fallback;
   }
 
-  /// هل الاسم أيقونة معروفة؟
-  static bool has(String? name) =>
-      name != null && _map.containsKey(name.toLowerCase().trim());
+  /// هل الاسم أيقونة معروفة (أساسية أو بديلة)؟
+  static bool has(String? name) {
+    if (name == null || name.isEmpty) return false;
+    final key = name.toLowerCase().trim().replaceAll('_', '-');
+    return _map.containsKey(key) || _aliases.containsKey(key);
+  }
 
   /// قائمة الأيقونات المتاحة (بدون «إسعاف» المرسومة يدوياً)
   static List<String> get names => _map.keys.toList()..sort();
@@ -317,9 +382,6 @@ class AppIcon extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final n = (name ?? '').trim();
-    if (n.isEmpty) {
-      return Icon(LucideIcons.circle, size: size, color: color);
-    }
 
     // أيقونة الإسعاف المرسومة يدوياً
     if (n == 'ambulance' || n == 'اسعاف' || n == 'إسعاف') {
@@ -327,10 +389,11 @@ class AppIcon extends StatelessWidget {
     }
 
     // رمز تعبيري أو نص
-    if (!looksLikeName(n)) {
+    if (n.isNotEmpty && !looksLikeName(n)) {
       return Text(n, style: TextStyle(fontSize: size, color: color));
     }
 
+    // اسم أيقونة — وإن كان فارغًا أو مجهولًا يرجع لبديل الموقع (map-pin)
     return Icon(AppIcons.get(n), size: size, color: color);
   }
 }
