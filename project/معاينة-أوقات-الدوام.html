@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>معاينة — أوقات الدوام في تطبيق أندرويد (قبل/بعد)</title>
+<style>
+  :root {
+    --bg:#f6f8fb; --surface:#fff; --border:#e6eaf0; --muted:#9aa5b1;
+    --text:#1f2937; --text2:#6b7280; --primary:#0ea5e9; --primary-soft:#e0f2fe;
+    --primary-light:#bae6fd; --primary-dark:#0369a1; --closed:#dc2626;
+    --open:#16a34a; --radius:14px;
+    --font:'Tajawal','Cairo',system-ui,-apple-system,'Segoe UI',sans-serif;
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font-family:var(--font); padding:22px; }
+  h1 { font-size:1.25rem; margin:0 0 6px; }
+  .sub { color:var(--text2); font-size:.9rem; margin:0 0 18px; line-height:1.8; }
+  .wrap { display:flex; flex-wrap:wrap; gap:20px; align-items:flex-start; }
+  .phone { width:330px; background:var(--surface); border:1px solid var(--border); border-radius:22px;
+           padding:14px; box-shadow:0 8px 24px rgba(15,23,42,.06); }
+  .phone h2 { font-size:.95rem; margin:2px 0 10px; display:flex; align-items:center; gap:7px; }
+  .tag { font-size:.7rem; font-weight:800; padding:2px 8px; border-radius:999px; }
+  .tag--before { background:#fee2e2; color:#b91c1c; }
+  .tag--after  { background:#dcfce7; color:#15803d; }
+  .card { border:1px solid var(--border); border-radius:var(--radius); padding:14px;
+          background:var(--surface); }
+  .card__head { display:flex; align-items:center; gap:9px; margin-bottom:12px; }
+  .card__badge { width:28px; height:28px; border-radius:9px; background:rgba(14,165,233,.12);
+                 display:grid; place-items:center; color:var(--primary); font-size:14px; }
+  .card__title { font-size:14.5px; font-weight:800; }
+  .row { display:flex; align-items:flex-start; gap:6px; padding:9px 12px; border-radius:10px;
+         margin-bottom:6px; background:var(--bg); border:1px solid transparent; }
+  .row.is-today { background:var(--primary-soft); border-color:var(--primary-light); }
+  .row__day { width:62px; font-size:12.5px; font-weight:600; color:var(--text2); flex:none; }
+  .row.is-today .row__day { color:var(--primary-dark); font-weight:800; }
+  .row__val { font-size:12.5px; font-weight:700; flex:1; }
+  .row.is-today .row__val { color:var(--primary-dark); }
+  .row__val--off { color:var(--muted); }
+  .row__val--closed { color:var(--closed); font-weight:700; }
+  .note { font-size:.82rem; color:var(--text2); line-height:1.9; margin-top:16px;
+          background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:13px 15px; }
+  code { background:#f1f5f9; padding:1px 5px; border-radius:5px; font-size:.85em; }
+  .kv { font-size:.85rem; }
+  .kv span { color:var(--muted); }
+</style>
+</head>
+<body>
+  <h1>أوقات الدوام في شاشة تفاصيل الخدمة — قبل/بعد</h1>
+  <p class="sub">
+    نفس الاستجابة الحقيقية من الخادم (<code>GET /api/services/&lt;id&gt;</code>) لعيادة
+    «د. طارق العظم» — ٨ فترات على ٤ أيام، والباقي عطلة. الشكل يحاكي ودجة
+    «أوقات الدوام» في <code>service_detail_screen.dart</code>.
+  </p>
+
+  <div class="wrap">
+    <div class="phone">
+      <h2>قبل الإصلاح <span class="tag tag--before">كل الأيام مغلقة</span></h2>
+      <div class="card">
+        <div class="card__head">
+          <span class="card__badge">🗓</span>
+          <span class="card__title">أوقات الدوام</span>
+        </div>
+        <div class="row"><span class="row__day">الأحد</span><span class="row__val row__val--closed">مغلقة</span></div>
+        <div class="row"><span class="row__day">الأحد</span><span class="row__val row__val--closed">مغلقة</span></div>
+        <div class="row is-today"><span class="row__day">الإثنين</span><span class="row__val row__val--closed">مغلقة</span></div>
+        <div class="row"><span class="row__day">الإثنين</span><span class="row__val row__val--closed">مغلقة</span></div>
+        <div class="row"><span class="row__day">الأربعاء</span><span class="row__val row__val--closed">مغلقة</span></div>
+        <div class="row"><span class="row__day">الأربعاء</span><span class="row__val row__val--closed">مغلقة</span></div>
+        <div class="row"><span class="row__day">الخميس</span><span class="row__val row__val--closed">مغلقة</span></div>
+        <div class="row"><span class="row__day">الخميس</span><span class="row__val row__val--closed">مغلقة</span></div>
+      </div>
+      <p class="kv" style="margin-top:10px">
+        <span>السبب:</span> التطبيق يقرأ <code>is_open</code> و<code>from/to</code>،
+        والخادم يرسل <code>opens/closes/is_24h</code> ⇒ القيمة فارغة ⇒ مغلقة.
+      </p>
+    </div>
+
+    <div class="phone">
+      <h2>بعد الإصلاح <span class="tag tag--after">الأسبوع كاملاً</span></h2>
+      <div class="card">
+        <div class="card__head">
+          <span class="card__badge">🗓</span>
+          <span class="card__title">أوقات الدوام</span>
+        </div>
+        <div class="row"><span class="row__day">الأحد</span><span class="row__val">10:00 – 13:00 · 17:00 – 21:00</span></div>
+        <div class="row is-today"><span class="row__day">الإثنين</span><span class="row__val">10:00 – 13:00 · 17:00 – 21:00</span></div>
+        <div class="row"><span class="row__day">الثلاثاء</span><span class="row__val row__val--off">عطلة</span></div>
+        <div class="row"><span class="row__day">الأربعاء</span><span class="row__val">10:00 – 13:00 · 17:00 – 21:00</span></div>
+        <div class="row"><span class="row__day">الخميس</span><span class="row__val">10:00 – 13:00 · 17:00 – 21:00</span></div>
+        <div class="row"><span class="row__day">الجمعة</span><span class="row__val row__val--off">عطلة</span></div>
+        <div class="row"><span class="row__day">السبت</span><span class="row__val row__val--off">عطلة</span></div>
+      </div>
+      <p class="kv" style="margin-top:10px">
+        <span>يوم بفترتين:</span> سطر واحد يفصل بينهما «·» ·
+        <span>24 ساعة:</span> تظهر «٢٤ ساعة» · <span>مغلق:</span> «عطلة» مثل تطبيق الويب.
+      </p>
+    </div>
+
+    <div class="phone">
+      <h2>بطاقة المعلومات <span class="tag tag--after">أيقونة كل حقل</span></h2>
+      <div class="card">
+        <div class="card__head">
+          <span class="card__badge">ℹ️</span>
+          <span class="card__title">معلومات الخدمة</span>
+        </div>
+        <div class="row"><span style="width:15px">📍</span><span class="row__day">المنطقة</span><span class="row__val">ديرالزور — الحسكة</span></div>
+        <div class="row"><span style="width:15px">🧠</span><span class="row__day">الاختصاص</span><span class="row__val">عصبية</span></div>
+        <div class="row"><span style="width:15px">#️⃣</span><span class="row__day">سعر المعاينة</span><span class="row__val">25,000 ل.س</span></div>
+      </div>
+      <p class="kv" style="margin-top:10px">
+        <span>قبل:</span> كل الحقول كانت تُرسم بأيقونة «الوسم» 🏷 وحدها، فتغيب أيقونة
+        سعر المعاينة. <span>بعد:</span> تُرسم أيقونة الحقل القادمة من الخادم
+        (<code>icon: "hash"</code>)، والإيموجي يُعرض كما هو.
+      </p>
+    </div>
+  </div>
+
+  <p class="note">
+    <strong>للتذكير:</strong> القيم المعروضة مأخوذة من استجابة الخادم الحقيقية،
+    وليست تقديرية — والاختبار <code>project/dalel_android/test/schedule_row_test.dart</code>
+    يثبّت عقد المفاتيح (<code>day · opens · closes · is_24h</code>) في الاتجاهين،
+    ويعمل تلقائياً في سير البناء قبل إنتاج APK.
+  </p>
+</body>
+</html>
