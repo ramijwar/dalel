@@ -439,8 +439,8 @@ textarea {
 .cat-card {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 14px;
+  gap: 10px;
+  padding: 12px;
   background: var(--bg2);
   border-radius: var(--radius);
   border: 1px solid var(--border);
@@ -454,8 +454,8 @@ textarea {
 
 .cat-card__icon {
   font-size: 1.6rem;
-  width: 44px;
-  height: 44px;
+  width: 40px;
+  height: 40px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -465,8 +465,8 @@ textarea {
 }
 
 .cat-card__text { flex: 1; min-width: 0; }
-.cat-card__text h3 { font-size: 0.95rem; font-weight: 700; margin-bottom: 2px; }
-.cat-card__text p { font-size: 0.8rem; color: var(--text2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cat-card__text h3 { font-size: 0.92rem; font-weight: 700; margin-bottom: 1px; }
+.cat-card__text p { font-size: 0.78rem; color: var(--text2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cat-card__arrow { color: var(--text3); flex-shrink: 0; }
 
 /* ===== صفحة الخدمات ===== */
@@ -1302,9 +1302,13 @@ dialog.modal.modal--wide {
   .page { padding: 12px; }
   .home__hero { padding: 24px 12px; }
   .home__logo { font-size: 1.5rem; }
-  .home__counters { grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; }
-  .counter { padding: 12px 8px; }
-  .counter__num { font-size: 1.3rem; }
+  /* ست بطاقات إحصاء في العرض الضيّق: أعمدة أضيق قليلاً ⇒ سطران بدل ثلاثة،
+     فتتناسق كتلة البطاقات مع الشريط العلوي بلا استطالة الصفحة. */
+  .home__counters { grid-template-columns: repeat(auto-fit, minmax(102px, 1fr)); gap: 7px; }
+  .counter { padding: 11px 7px; gap: 4px; }
+  .counter__icon { font-size: 1.5rem; }
+  .counter__num { font-size: 1.25rem; }
+  .counter__label { font-size: 0.75rem; }
   .svc-grid { grid-template-columns: 1fr; gap: 8px; }
   .svc { padding: 12px; }
   .svc__actions { flex-direction: column; }
@@ -1321,7 +1325,7 @@ dialog.modal.modal--wide {
 @media (max-width: 480px) {
   .site-nav__brand span:not(.site-nav__emoji) { display: none; }
   .site-nav__name { display: none; }
-  .home__counters { grid-template-columns: repeat(2, 1fr); }
+  .home__counters { grid-template-columns: repeat(auto-fit, minmax(94px, 1fr)); }
 }
 
 /* ===== طباعة ===== */
@@ -1924,10 +1928,10 @@ dialog.modal.modal--wide {
 }
 
 /* ===== تحسينات العرض ===== */
-@media (min-width: 700px) {
+@media (min-width: 520px) {
   .cat-grid { grid-template-columns: repeat(2, 1fr); }
 }
-@media (min-width: 1000px) {
+@media (min-width: 820px) {
   .cat-grid { grid-template-columns: repeat(3, 1fr); }
 }
 
