@@ -131,6 +131,9 @@ class AppProvider extends ChangeNotifier {
   Future<bool> sync({bool force = false}) async {
     if (_syncing) return false;
 
+    // وضع الاختبار: البيانات محقونة، فلا نلمس الشبكة — نفس حماية loadSection
+    if (_debugMode) return false;
+
     _syncing = true;
     _error = null;
     notifyListeners();

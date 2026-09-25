@@ -54,15 +54,29 @@ class _SectionScreenState extends State<SectionScreen> {
 
   final TextEditingController _searchCtrl = TextEditingController();
 
-  SectionConfig get _info => SectionConfig.of(widget.category.slug);
+  /// القسم من **مزوّد البيانات** لا من الصورة التي وصلت مع الشاشة.
+  ///
+  /// المزوّد يعيد جلب `/api/meta` (بالفلاتر) عند التشغيل، فلو بقي القسم
+  /// صورةً جامدة لما ظهر تغيير المدير للفلاتر حتى يُغلق المستخدم التطبيق.
+  /// عند البناء تُقرأ أحدث نسخة، وغيابها (اختبارات) يرجع إلى `widget.category`.
+  Category get _cat {
+    try {
+      return context.read<AppProvider>().categoryBySlug(widget.category.slug) ??
+          widget.category;
+    } catch (_) {
+      return widget.category;
+    }
+  }
+
+  SectionConfig get _info => SectionConfig.of(_cat.slug);
 
   /// ═══════════════ الفلاتر المُسنَدة من لوحة التحكم ═══════════════
   /// المدير يُنشئ فلاتر في المكتبة (المناطق · الاختصاص · نوع المركبة …)
   /// ثم يُسنِد لكل قسم فلتره الأساسي — وهو الذي يبني بطاقات المستوى الأول.
   /// `null` تعني خادماً قديماً أو قسماً بلا فلاتر، فيُستخدم التجميع
   /// الاحتياطي المضمّن في التطبيق (SectionConfig) بلا أي تراجع.
-  CategoryFilterLink? get _primaryFilter => widget.category.primaryFilter;
-  List<CategoryFilterLink> get _secondaryFilters => widget.category.secondaryFilters;
+  CategoryFilterLink? get _primaryFilter => _cat.primaryFilter;
+  List<CategoryFilterLink> get _secondaryFilters => _cat.secondaryFilters;
 
   /// هل التجميع الأساسي على المناطق؟ (يُغيّر صياغة العنوان ورأس النتائج)
   bool get _groupIsRegion {
@@ -96,7 +110,7 @@ class _SectionScreenState extends State<SectionScreen> {
     final raw = (s.meta['specialty_name'] ?? s.metaVal('specialty') ?? '')
         .toString()
         .trim();
-    final resolved = widget.category.fields
+    final resolved = _cat.fields
         .where((f) => f.key == 'specialty')
         .expand((f) => f.options)
         .where((o) => o.value == raw || o.id.toString() == raw || o.label == raw)
@@ -128,8 +142,19 @@ class _SectionScreenState extends State<SectionScreen> {
     });
     try {
       final app = context.read<AppProvider>();
-      final list =
-          await app.loadSection(widget.category.slug, forceNetwork: force);
+
+      // تحديث يدوي: أعِد جلب /api/meta أيضاً — فيظهر أي تغيير في فلاتر
+      // الأقسام فوراً. لو طلبنا الخدمات فقط لبقيت الفلاتر كما كانت حتى
+      // إعادة تشغيل التطبيق.
+      if (force) {
+        try {
+          await app.sync(force: true);
+        } catch (_) {
+          // فشل تحديث الإعدادات لا يمنع تحديث الخدمات
+        }
+      }
+
+      final list = await app.loadSection(_cat.slug, forceNetwork: force);
       if (!mounted) return;
       setState(() {
         _all = list;
@@ -148,7 +173,11 @@ class _SectionScreenState extends State<SectionScreen> {
   /// هل تجتاز الخدمة الفلاتر المُضيِّقة؟ (بلا فلتر المجموعة المختارة)
   /// منطق واحد تستخدمه القائمة وبطاقات التجميع معاً — فلا تتباعد
   /// أعداد البطاقات عن النتائج الفعلية.
-  bool _passes(Service s) {
+  ///
+  /// `ignoreSecondary`: يُستخدم عند بناء خيارات فلتر ثانوي — فلا يُطبَّق
+  /// على خياراته، وإلا بقي الخيار المختار **وحده** في القائمة فلم يستطع
+  /// الزائر التبديل إلى قيمة أخرى إلا بإلغاء الفلتر أولاً.
+  bool _passes(Service s, {CategoryFilterLink? ignoreSecondary}) {
     if (_govId != null && s.governorateId != _govId) return false;
     if (_zone != null && s.regionZone != _zone) return false;
     if (_regionId != null && s.regionId != _regionId) return false;
@@ -163,6 +192,8 @@ class _SectionScreenState extends State<SectionScreen> {
 
     // الفلاتر الثانوية التي أسنَدها المدير للقسم
     for (final f in _secondaryFilters) {
+      // المقارنة بالمفتاح لا بالهوية: القائمة تُبنى في كل نداء
+      if (ignoreSecondary != null && f.key == ignoreSecondary.key) continue;
       final want = _secState[f.key];
       if (want == null || want.isEmpty) continue;
       if (_valueOf(s, f) != want) return false;
@@ -305,7 +336,8 @@ class _SectionScreenState extends State<SectionScreen> {
     final counts = <String, int>{};
     final labels = <String, String>{};
     for (final s in _all) {
-      if (!_passes(s)) continue;
+      // نبني الخيارات من الخدمات التي تجتاز بقية الفلاتر — عدا هذا الفلتر
+      if (!_passes(s, ignoreSecondary: f)) continue;
       final v = _valueOf(s, f);
       final k = v.isEmpty ? '__none' : v;
       counts[k] = (counts[k] ?? 0) + 1;
@@ -440,7 +472,7 @@ class _SectionScreenState extends State<SectionScreen> {
     return Scaffold(
       backgroundColor: AppTheme.background,
       appBar: AppBar(
-        title: Text(widget.category.name),
+        title: Text(_cat.name),
         leading: IconButton(
           icon: const Icon(LucideIcons.arrowRight),
           onPressed: () => Navigator.pop(context),
@@ -749,7 +781,7 @@ class _SectionScreenState extends State<SectionScreen> {
         return EmptyState(
           icon: LucideIcons.inbox,
           title: 'لا توجد خدمات بعد',
-          subtitle: 'لم تُضَف خدمات إلى «${widget.category.name}» حتى الآن',
+          subtitle: 'لم تُضَف خدمات إلى «${_cat.name}» حتى الآن',
         );
       }
       if (groups.isEmpty) {

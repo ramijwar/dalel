@@ -360,4 +360,136 @@ void main() {
       expect(find.text('الاختصاصات'), findsOneWidget);
     });
   });
+
+  group('الفلاتر الثانوية المُسنَدة للقسم', () {
+    /// قسم السرفيس: «نوع المركبة» أساسي (بطاقات) و«اتجاه السفر» ثانوي (شريحة)
+    Category transportCategory() => Category.fromJson({
+          'id': 40,
+          'slug': 'transport',
+          'name': 'سرفيس واسعافية',
+          'layout': 'row',
+          'features': {'duty': true, 'schedule': true, 'status': true},
+          'filters': [
+            link(
+                id: 9,
+                key: 'flt-vehicle',
+                label: 'نوع المركبة',
+                type: 'field',
+                srcKey: 'vehicle'),
+            link(
+                id: 8,
+                key: 'flt-direction',
+                label: 'اتجاه السفر',
+                type: 'field',
+                srcKey: 'direction',
+                primary: false,
+                order: 41),
+          ],
+        });
+
+    List<Service> transportServices() => [
+          Service.fromJson(service(
+              id: 1,
+              name: 'س١',
+              categoryId: 40,
+              regionId: 731,
+              regionName: 'ابوحمام',
+              meta: {'vehicle': 'باص', 'direction': 'ديرالزور-دمشق'})),
+          Service.fromJson(service(
+              id: 2,
+              name: 'س٢',
+              categoryId: 40,
+              regionId: 731,
+              regionName: 'ابوحمام',
+              meta: {'vehicle': 'إسعاف', 'direction': 'ديرالزور-حلب'})),
+        ];
+
+    testWidgets('شريحة الفلتر الثانوي تظهر بحالة «الكل»',
+        (tester) async {
+      await tester.pumpWidget(harness(
+        category: transportCategory(),
+        services: transportServices(),
+      ));
+      await tester.pumpAndSettle();
+
+      // الأساسي يبني البطاقات، والثانوي يظهر كشريحة اختيار
+      expect(find.text('نوع المركبة'), findsOneWidget);
+      expect(find.text('اتجاه السفر: الكل'), findsOneWidget);
+    });
+
+    testWidgets('اختيار قيمة ثانوية يُصفّي النتائج فعلياً', (tester) async {
+      await tester.pumpWidget(harness(
+        category: transportCategory(),
+        services: transportServices(),
+      ));
+      await tester.pumpAndSettle();
+
+      // افتح بطاقة «باص» ثم اختر اتجاهاً
+      await tester.tap(find.text('باص'));
+      await tester.pumpAndSettle();
+      expect(find.text('س١'), findsOneWidget);
+      expect(find.text('س٢'), findsOneWidget);
+
+      await tester.tap(find.text('اتجاه السفر: الكل'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('ديرالزور-حلب'));
+      await tester.pumpAndSettle();
+
+      // الشريحة تعرض القيمة المختارة، والنتيجة خدمة واحدة
+      expect(find.text('اتجاه السفر: ديرالزور-حلب'), findsOneWidget);
+      expect(find.text('س٢'), findsOneWidget);
+      expect(find.text('س١'), findsNothing,
+          reason: 'س١ اتجاهها دمشق — يجب أن يحجبها فلتر الاتجاه');
+    });
+
+    testWidgets('الفلتر الثانوي لا يحجب خياراته بعد الاختيار',
+        (tester) async {
+      await tester.pumpWidget(harness(
+        category: transportCategory(),
+        services: transportServices(),
+      ));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('اتجاه السفر: الكل'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('ديرالزور-دمشق'));
+      await tester.pumpAndSettle();
+
+      // أعِد فتح القائمة: يجب أن يبقى الاتجاه الآخر قابلاً للاختيار مباشرةً
+      await tester.tap(find.text('اتجاه السفر: ديرالزور-دمشق'));
+      await tester.pumpAndSettle();
+      expect(find.text('ديرالزور-حلب'), findsOneWidget,
+          reason: 'لو حجب الفلتر نفسه لما أمكن التبديل إلا بإلغائه أولاً');
+
+      // التبديل مباشرةً يعمل
+      await tester.tap(find.text('ديرالزور-حلب'));
+      await tester.pumpAndSettle();
+      expect(find.text('اتجاه السفر: ديرالزور-حلب'), findsOneWidget);
+    });
+
+    testWidgets('إلغاء الفلتر الثانوي يُعيد النتائج', (tester) async {
+      await tester.pumpWidget(harness(
+        category: transportCategory(),
+        services: transportServices(),
+      ));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('اتجاه السفر: الكل'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('ديرالزور-دمشق'));
+      await tester.pumpAndSettle();
+      expect(find.text('اتجاه السفر: ديرالزور-دمشق'), findsOneWidget);
+
+      // «الكل» في الورقة السفلية
+      await tester.tap(find.text('اتجاه السفر: ديرالزور-دمشق'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('الكل'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('اتجاه السفر: الكل'), findsOneWidget);
+      await tester.tap(find.text('باص'));
+      await tester.pumpAndSettle();
+      expect(find.text('س١'), findsOneWidget);
+    });
+  });
 }
