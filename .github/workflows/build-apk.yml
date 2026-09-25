@@ -52,7 +52,7 @@ on:
         required: false
         default: ''
       flutter_version:
-        description: 'إصدار Flutter (فارغ = الافتراضي المضبوط)' 
+        description: 'إصدار Flutter (فارغ = الافتراضي المضبوط)'
         required: false
         default: ''
 
@@ -75,9 +75,8 @@ env:
   FLUTTER_VERSION: ${{ inputs.flutter_version || '3.27.4' }}
   APP_DIR: project/dalel_android
 
-# صيغة موحّدة: تُعلن أسطر الخطأ المفيدة كتعليقات في واجهة Actions
-# (كانت الأخطاء مدفونة في سجل طويل — هكذا تظهر للمدير مباشرةً)
-# وSHOW_LOG_ERRORS يُبقي السجل الكامل عند الحاجة.
+# ملاحظة: أسطر الخطأ المفيدة تُعلَن كتعليقات (::error) في واجهة Actions
+# بدل دفنها في سجل طويل — يراها المدير مباشرةً في صفحة التشغيل.
 
 jobs:
   # ═══════════════════════════════════════════════════════════
@@ -234,7 +233,7 @@ jobs:
           NAME="${IN_NAME:-$DEF_NAME}"
           CODE="${IN_CODE:-$DEF_CODE}"
           TYPE="${IN_TYPE:-release}"
-          URL="${IN_URL:-https://t3lam.site/dalel}"
+          URL="${IN_URL:-https://t3lam.site/daleltest}"
 
           # تحقق مبكّر برسالة واضحة بدل فشل غامض في Gradle
           case "$CODE" in
@@ -381,23 +380,37 @@ jobs:
           retention-days: 90
 
       # ─── إصدار GitHub (رابط تحميل عام دائم) ───
+      # يُنشأ بأداة gh الرسمية المتوفّرة على الخادم بدل إجراء طرف ثالث
+      # (المهنة تملك صلاحية الكتابة، فالأولى عدم تمريرها لجهة خارجية).
       - name: إنشاء إصدار GitHub
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.publish_release }}
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ inputs.release_tag || format('v{0}-{1}', steps.ver.outputs.name, steps.ver.outputs.code) }}
-          name: ${{ format('دليل الدير {0} (بناء {1})', steps.ver.outputs.name, steps.ver.outputs.code) }}
-          body: |
-            حزمة أندرويد جاهزة للتنزيل المباشر.
+        working-directory: ${{ env.APP_DIR }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ inputs.release_tag || format('v{0}-{1}', steps.ver.outputs.name, steps.ver.outputs.code) }}
+          TITLE: ${{ format('دليل الدير {0} (بناء {1})', steps.ver.outputs.name, steps.ver.outputs.code) }}
+          APK: ${{ steps.ver.outputs.apk }}
+        run: |
+          set -e
+          cat > /tmp/notes.md <<EOF
+          حزمة أندرويد جاهزة للتنزيل المباشر.
 
-            - الإصدار: ${{ steps.ver.outputs.name }} (بناء ${{ steps.ver.outputs.code }})
-            - الحجم: ${{ steps.pack.outputs.size_h }} ميغا
-            - SHA-256: `${{ steps.pack.outputs.sha }}`
+          - الإصدار: ${{ steps.ver.outputs.name }} (بناء ${{ steps.ver.outputs.code }})
+          - الحجم: ${{ steps.pack.outputs.size_h }} ميغا
+          - SHA-256: \`${{ steps.pack.outputs.sha }}\`
 
-            للاستعمال في «تحديث التطبيق»: انسخ رابط الملف أدناه والصقه في حقل
-            «رابط تحميل خارجي».
-          files: ${{ env.APP_DIR }}/${{ steps.ver.outputs.apk }}
-          generate_release_notes: true
+          للاستعمال في «تحديث التطبيق»: انسخ رابط الملف من هذه الصفحة والصقه في
+          حقل «مسار الملف» أو «رابط خارجي» في لوحة التحكم.
+          EOF
+
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "$APK" --clobber
+          else
+            gh release create "$TAG" "$APK" --title "$TITLE" \
+              --notes-file /tmp/notes.md --generate-notes
+          fi
+          echo "🔗 $(gh release view "$TAG" --json url -q .url)"
+          echo "- رابط الإصدار: $(gh release view "$TAG" --json url -q .url)" >> "$GITHUB_STEP_SUMMARY"
 
       - name: تنظيف ملف التوقيع
         if: always()
