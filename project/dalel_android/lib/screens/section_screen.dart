@@ -711,51 +711,82 @@ class _SectionScreenState extends State<SectionScreen> {
       padding: const EdgeInsets.fromLTRB(14, 4, 14, 8),
       child: Row(
         children: [
-          Icon(LucideIcons.layers, size: 14, color: AppTheme.textSecondary),
-          const SizedBox(width: 5),
-          Text(
-            '$total',
-            style: const TextStyle(
-              fontSize: 13.5,
-              fontWeight: FontWeight.w800,
-              color: AppTheme.textPrimary,
-            ),
-          ),
-          const SizedBox(width: 4),
-          Text(
-            _info.unitPlural,
-            style: const TextStyle(fontSize: 12, color: AppTheme.textMuted),
-          ),
-          if (openNow > 0) ...[
-            const SizedBox(width: 9),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
-              decoration: BoxDecoration(
-                color: AppTheme.openBg,
-                borderRadius: BorderRadius.circular(999),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                      width: 5,
-                      height: 5,
-                      decoration: const BoxDecoration(
-                          color: AppTheme.open, shape: BoxShape.circle)),
-                  const SizedBox(width: 4),
-                  Text(
-                    '$openNow تعمل الآن',
+          /* العدّاد داخل Expanded: على الشاشات الضيقة (٣٦٠ نقطة — وهي مقاس
+             هواتف كثيرة) كان مجموع العروض الثابتة يتجاوز المتاح فيظهر شريط
+             تجاوز يقتطع المحتوى، ويزيد الأمر مع خطٍّ أعرض من المعتاد.
+             Expanded يمنحه ما يبقى بعد مفتاح طريقة العرض، وFlexible يسمح
+             للنصوص بالتقلّص بـ«…» بدل تجاوز الحدود — والمظهر على الشاشات
+             العادية لا يتغيّر. */
+          Expanded(
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(LucideIcons.layers,
+                    size: 14, color: AppTheme.textSecondary),
+                const SizedBox(width: 5),
+                Flexible(
+                  child: Text(
+                    '$total',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                      color: AppTheme.open,
+                      fontSize: 13.5,
+                      fontWeight: FontWeight.w800,
+                      color: AppTheme.textPrimary,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 4),
+                Flexible(
+                  child: Text(
+                    _info.unitPlural,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                        fontSize: 12, color: AppTheme.textMuted),
+                  ),
+                ),
+                if (openNow > 0) ...[
+                  const SizedBox(width: 9),
+                  Flexible(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 7, vertical: 2.5),
+                      decoration: BoxDecoration(
+                        color: AppTheme.openBg,
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                              width: 5,
+                              height: 5,
+                              decoration: const BoxDecoration(
+                                  color: AppTheme.open,
+                                  shape: BoxShape.circle)),
+                          const SizedBox(width: 4),
+                          Flexible(
+                            child: Text(
+                              '$openNow تعمل الآن',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                                color: AppTheme.open,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ],
-              ),
+              ],
             ),
-          ],
-          const Spacer(),
+          ),
+          const SizedBox(width: 8),
           // ─── مفتاح طريقة العرض ───
           Container(
             decoration: BoxDecoration(
