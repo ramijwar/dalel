@@ -384,7 +384,14 @@ class _SectionScreenState extends State<SectionScreen> {
                 ],
               ),
             ),
-            Flexible(
+            /* حدٌّ صريح بدل Flexible: داخل Column بـmainAxisSize.min يمكن أن
+               يرمي Flexible خطأ «قيود ارتفاع غير محدودة» في بعض الأغلفة.
+               الحدّ الصريح يجعل الورقة تمرّ في كل الحالات، ومع shrinkWrap
+               تصغر القائمة على محتواها ولا تزيد على نصف الشاشة. */
+            ConstrainedBox(
+              constraints: BoxConstraints(
+                maxHeight: MediaQuery.of(context).size.height * 0.5,
+              ),
               child: ListView(
                 shrinkWrap: true,
                 padding: const EdgeInsets.only(bottom: 10),
